@@ -1,4 +1,5 @@
 import { Fast } from '../lib/Fast.js';
+import * as C from '../constants.js';
 
 export class SearchBar extends Fast {
     constructor(props) {
@@ -137,7 +138,98 @@ export class SearchBar extends Fast {
     }
 
     showAddFiles() {
-        // TODO: mostrar un modal con drag and drop para añadir archivos a la playlist
+        let filesStorage = [];
+
+        Swal.fire({
+            title: 'Subir Archivos',
+            theme: 'dark',
+            html: `
+                <div id="dropArea" class="custom-drop-zone">
+                    <div class="drop-icon"><i class="fa-solid fa-upload"></i></div>
+                    <p class="drop-text">Arrastra tu archivo aquí o haz click</p>
+                    <input type="file" id="fileElem" multiple accept="${C.FILE_TYPES.VIDEO.join(', ')}, ${C.FILE_TYPES.AUDIO.join(', ')}" style="display:none">
+                    <div id="fileListContainer"></div>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Subir',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            didOpen: () => {
+                const dropArea = document.querySelector('#dropArea');
+                const fileInput = document.querySelector('#fileElem');
+                const fileListContainer = document.querySelector('#fileListContainer');
+
+                // --- Lógica Drag & Drop (Igual que antes) ---
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    dropArea.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); }, false);
+                });
+                ['dragenter', 'dragover'].forEach(eventName => {
+                    dropArea.addEventListener(eventName, () => dropArea.classList.add('highlight'), false);
+                });
+                ['dragleave', 'drop'].forEach(eventName => {
+                    dropArea.addEventListener(eventName, () => dropArea.classList.remove('highlight'), false);
+                });
+
+                dropArea.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
+                dropArea.addEventListener('click', () => fileInput.click());
+                fileInput.addEventListener('change', function() { handleFiles(this.files); });
+
+                function handleFiles(files) {
+                    if (files.length > 0) {
+                        filesStorage = Array.from(files);
+                        let listHtml = '';
+                        filesStorage.forEach(file => {
+                            listHtml += `
+                                <div class="file-item">
+                                    <span id="fileName">${file.name}</span>
+                                    <span>${(file.size/1024).toFixed(1)} KB</span>
+                                </div>
+                            `;
+                        });
+                        fileListContainer.innerHTML = listHtml;
+                        fileListContainer.style.display = 'block';
+                        dropArea.style.borderColor = '#28a745';
+                    }
+                }
+            },
+            preConfirm: () => {
+                if (filesStorage.length === 0) {
+                    Swal.showValidationMessage('Selecciona al menos un archivo');
+                    return false;
+                }
+                // Retornamos los archivos para procesarlos en el .then()
+                // Opcional: Podrías llamar a guardarEnIndexedDB aquí y usar showLoading()
+                return filesStorage;
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const archivosAProcesar = result.value;
+
+                // Mostramos un loading mientras IndexedDB trabaja (es rápido, pero buena práctica)
+                Swal.fire({
+                    title: 'Guardando en la playlist...',
+                    theme: 'dark',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                        
+                        // TODO: guardar en indexedDB
+                            // .then((cantidad) => {
+                            //     Swal.fire(
+                            //         '¡Guardado!',
+                            //         `Se han almacenado ${cantidad} archivos en IndexedDB localmente.`,
+                            //         'success'
+                            //     );
+                            // })
+                            // .catch((error) => {
+                            //     Swal.fire('Error', error, 'error');
+                            // });
+                    }
+                });
+            }
+        });
     }
 
     showSettings() {
@@ -145,10 +237,12 @@ export class SearchBar extends Fast {
             title: 'Configuración',
             theme: 'dark',
             html: `
-                <label for="playlistName">Nombre de la playlist</label>
-                <input type="text" class="playlist-name" id="playlistName">
+                <div class="playlist-name-container">
+                    <label for="playlistName" class="playlist-name-label">Nombre de la playlist</label>
+                    <input type="text" class="playlist-name" id="playlistName">
+                </div>
             `,
-            showCloseButton: true,
+            showCloseButton: false,
             showDenyButton: true,
             confirmButtonText: "Guardar",
             denyButtonText: `Eliminar`,
@@ -159,26 +253,32 @@ export class SearchBar extends Fast {
                     title: '¡Guardado!',
                     theme: 'dark',
                     icon: 'success',
+                    showCancelButton: false,
+                    showCloseButton: false,
+                    showConfirmButton: false,
                     timer: 1000
                 })
             } else if (result.isDenied) {
                 // TODO: eliminar la playlist
                 Swal.fire({
-                    title: "Are you sure?",
+                    title: "¿Estás seguro?",
                     theme: "dark",
-                    text: "You won't be able to revert this!",
+                    text: "No podrás revertir esto!",
                     icon: "warning",
                     showCancelButton: true,
-                    confirmButtonColor: "#3085d6",
-                    cancelButtonColor: "#d33",
-                    confirmButtonText: "Yes, delete it!"
+                    showCloseButton: false,
+                    confirmButtonText: "Sí, eliminar!",
                 }).then((result) => {
                     if (result.isConfirmed) {
                         Swal.fire({
-                        title: "Deleted!",
-                        theme: 'dark',
-                        text: "Your file has been deleted.",
-                        icon: "success"
+                            title: "¡Eliminado!",
+                            theme: 'dark',
+                            text: "Tu playlist ha sido eliminada.",
+                            icon: "success",
+                            showCancelButton: false,
+                            showCloseButton: false,
+                            showConfirmButton: false,
+                            timer: 1000
                         });
                     }
                 });

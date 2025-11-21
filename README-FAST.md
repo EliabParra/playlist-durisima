@@ -96,6 +96,7 @@ Lee `COMPONENTES.md` para:
 2. **Tags**: Se generan automáticamente en kebab-case (ej: `audio-player`)
 3. **Fast global**: `window.fast` está disponible en toda tu app
 4. **Rutas CSS**: Los estilos se buscan automáticamente en `src/css/`
+5. **Tipografía Global**: Se ha integrado la fuente variable **Inter** (pesos 400–700) con `display=swap` para mejorar rendimiento. Puedes usar utilidades (`.text-sm`, `.font-semibold`, etc.) definidas en `global.css`.
 
 ## ⚙️ Configuración de rutas
 
