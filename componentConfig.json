@@ -1,0 +1,7 @@
+{
+  "name": "SearchBar",
+  "pathComponent": "./src/js/components/",
+  "pathHTML": "./examples/",
+  "pathCss": "./src/css/",
+  "xTab": "search-bar"
+}
