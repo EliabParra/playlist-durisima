@@ -82,19 +82,64 @@ export class SideBar extends Fast {
   addToBody(){ document.body.appendChild(this); }
 
   showAddPlaylist(){
-    // UI mínima (sin SweetAlert para mantener simplicidad). Se puede volver a añadir.
-    const name = prompt('Nombre de la playlist:');
-    if(!name) return;
-    // Selección de archivos (opcional)
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.multiple = true;
-    input.accept = 'audio/*,video/*';
-    input.onchange = () => {
-      const files = Array.from(input.files);
-      this._createPlaylist(name, files);
-    };
-    input.click();
+    // SweetAlert2 modal con drag & drop y selección múltiple
+    let filesStorage = [];
+    Swal.fire({
+      title: 'Crear playlist',
+      html: `
+        <div class="playlist-name-container">
+          <label for="playlistName" class="playlist-name-label">Nombre de la playlist</label>
+          <input type="text" class="playlist-name" id="playlistName" placeholder="Mi Playlist" />
+        </div>
+        <div id="dropArea" class="custom-drop-zone">
+          <div class="drop-icon"><i class="fa-solid fa-upload"></i></div>
+          <p class="drop-text">Arrastra archivos aquí o haz click</p>
+          <input type="file" id="fileElem" multiple accept="audio/*,video/*" style="display:none" />
+          <div id="fileListContainer"></div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Guardar',
+      cancelButtonText: 'Cancelar',
+      focusConfirm: false,
+      didOpen: () => {
+        const popup = Swal.getPopup();
+        const dropArea = popup.querySelector('#dropArea');
+        const fileInput = popup.querySelector('#fileElem');
+        const fileListContainer = popup.querySelector('#fileListContainer');
+
+        const preventDefaults = e => { e.preventDefault(); e.stopPropagation(); };
+        ['dragenter','dragover','dragleave','drop'].forEach(ev => dropArea.addEventListener(ev, preventDefaults, false));
+        ['dragenter','dragover'].forEach(ev => dropArea.addEventListener(ev, ()=> dropArea.classList.add('highlight'), false));
+        ['dragleave','drop'].forEach(ev => dropArea.addEventListener(ev, ()=> dropArea.classList.remove('highlight'), false));
+        dropArea.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
+        dropArea.addEventListener('click', ()=> fileInput.click());
+        fileInput.addEventListener('change', ()=> handleFiles(fileInput.files));
+
+        function handleFiles(fileList){
+          const arr = Array.from(fileList);
+          if(!arr.length) return;
+          filesStorage = arr;
+          let html = '';
+          arr.forEach(f => {
+            html += `<div class="file-item"><span>${f.name}</span><span>${(f.size/1024).toFixed(1)} KB</span></div>`;
+          });
+          fileListContainer.innerHTML = html;
+          fileListContainer.style.display = 'block';
+        }
+      },
+      preConfirm: () => {
+        const playlistName = Swal.getPopup().querySelector('#playlistName').value.trim();
+        if(!playlistName){ Swal.showValidationMessage('El nombre es obligatorio'); return false; }
+        return { name: playlistName, files: filesStorage };
+      }
+    }).then(res => {
+      if(res.isConfirmed){
+        const { name, files } = res.value;
+        this._createPlaylist(name, files);
+        Swal.fire('Playlist creada', `${name} (${files.length} archivos)`, 'success');
+      }
+    });
   }
 
   _createPlaylist(name, files){
@@ -104,6 +149,7 @@ export class SideBar extends Fast {
     this._persistState();
     this.updatePlaylistList();
     // TODO: Persistir playlist y archivos en IndexedDB (media + playlists stores)
+    // TODO: Generar IDs de media y asociarlos trackIds cuando exista repositorio
   }
 
   updatePlaylistList(){
