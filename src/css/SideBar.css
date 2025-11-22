@@ -1,0 +1,72 @@
+.side-bar {
+    position: relative;
+    width: 80px;
+    min-width: 80px;
+    height: 100vh;
+    padding: 0 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    background: #121212;
+    color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 18px -6px rgba(0,0,0,0.6),0 0 0 1px rgba(255,255,255,0.05);
+    transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.home-btn, .add-playlist-btn, .playlist-item {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    border: none;
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: background 120ms ease;
+}
+
+.home-btn { margin-top: 18px; }
+.add-playlist-btn { margin-bottom: 18px; }
+
+.home-btn::after {
+    content: '';
+    width: 70%;
+    height: 2px;
+    background: rgba(255,255,255,0.2);
+    position: absolute;
+    top: 89px;
+}
+
+.home-btn:hover, .add-playlist-btn:hover { background: rgba(255,255,255,0.1); }
+.home-btn:active, .add-playlist-btn:active { background: rgba(255,255,255,0.15); }
+
+.playlist-item { transition: all 200ms ease; }
+
+.playlist-list {
+    padding: 0;
+    margin: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.playlist-item:hover {
+    background: #1DB954;
+    color: #000;
+    font-weight: 600;
+}
+.playlist-item:active { transform: scale(.98); }
+.playlist-item.selected {
+    background: linear-gradient(-45deg, #11883d, #1DB954);
+    color: #000;
+    font-weight: 600;
+}
+
+/* TODO: integrar estados cargando y error para playlists persistentes (IndexedDB) */
