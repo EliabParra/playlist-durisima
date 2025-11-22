@@ -1,88 +1,197 @@
 import { Fast } from '../lib/Fast.js';
+import { eventBus } from '../lib/EventBus.js';
+import { createMediaController } from '../services/MediaController.js';
 
 export class PlayerBar extends Fast {
-    constructor(props){
-        super();
-        this.name = 'PlayerBar';
-        this.props = props || {};
+    constructor(props) {
+        super();  
+        this.name = "PlayerBar";
+        this.props = props;
+        this._sts = false;
+        this.built = () => {}; 
         this.attachShadow({mode:'open'});
         this._isBuilt = false;
-        this.built = ()=>{};
         this._loop = false;
         this._shuffle = false;
         this._playing = false;
         this.media = null; // HTMLMediaElement to control
+        this._queue = []; // internal queue placeholder
+        this._queueIndex = -1;
+        this.mediaController = createMediaController(); // wraps <audio>/<video>
+        // TODO: persist queue changes & last index
+        // subscribe to media events if needed
+        eventBus.on('play', ()=> { this._playing = true; this._updatePlayState(); });
+        eventBus.on('pause', ()=> { this._playing = false; this._updatePlayState(); });
+        eventBus.on('ended', ()=> this._onEnded());
+        eventBus.on('progress', ({ currentTime, duration })=> {
+            // Could throttle later
+            this._reflectProgress(currentTime, duration);
+            // TODO: persist currentTime periodically for resume feature
+        });
+        eventBus.on('volume:change', ({ volume, muted })=> {
+            // Future: reflect UI volume slider icon state
+        });
     }
 
-    #template(){
+    #getTemplate() { 
         return `
             <div class="player-wrapper" id="playerWrapper">
-                <div class="sidebar" id="playlistSidebar">
-                    <div class="sidebar-scroll">
-                        <button class="pl-btn" title="Playlist 1">P1</button>
-                        <button class="pl-btn" title="Playlist 2">P2</button>
-                        <button class="pl-btn" title="Playlist 3">P3</button>
-                        <button class="pl-btn" title="Crear" id="createPl">+</button>
+                <div class="player-top-row">
+                    <div class="metadata" id="metadata" aria-live="polite">
+                        <div class="cover" id="coverWrap">
+                            <img id="coverImg" alt="Cover" />
+                        </div>
+                        <div class="track-info" id="trackInfo">
+                            <div class="title" id="trackTitle">Sin título</div>
+                            <div class="artist" id="trackArtist">Desconocido</div>
+                        </div>
+                    </div>
+                    <div class="controls-center-group" aria-label="Controles de reproducción">
+                        <button id="shuffle" class="icon-btn" title="Aleatorio" aria-label="Aleatorio"><i class="fa-solid fa-shuffle"></i></button>
+                        <button id="prev" class="icon-btn" title="Anterior" aria-label="Anterior"><i class="fa-solid fa-backward-step"></i></button>
+                        <button id="playPause" class="play-btn" title="Play" aria-label="Reproducir/Pausar"><i class="fa-solid fa-play"></i></button>
+                        <button id="next" class="icon-btn" title="Siguiente" aria-label="Siguiente"><i class="fa-solid fa-forward-step"></i></button>
+                        <button id="loop" class="icon-btn" title="Repetir" aria-label="Repetir"><i class="fa-solid fa-repeat"></i></button>
+                    </div>
+                    <div class="right-group">
+                        <div class="volume-wrapper" id="volumeWrapper">
+                            <button id="muteToggle" class="icon-btn" title="Mute" aria-label="Silenciar"><i id="volumeIcon" class="fa-solid fa-volume-high"></i></button>
+                            <div class="volume-slider-wrap">
+                                <input id="volumeSlider" type="range" min="0" max="100" value="100" aria-label="Volumen" />
+                            </div>
+                        </div>
+                        <button id="fullscreen" class="icon-btn" title="Pantalla completa" aria-label="Pantalla completa"><i class="fa-solid fa-expand"></i></button>
                     </div>
                 </div>
-                <div class="player-main" id="playerMain">
-                    <div class="controls-top">
-                        <div class="controls-left">
-                            <button id="shuffle" class="icon-btn" title="Aleatorio"><i class="fa-solid fa-shuffle"></i></button>
-                            <button id="prev" class="icon-btn" title="Anterior"><i class="fa-solid fa-backward-step"></i></button>
-                        </div>
-
-                        <div class="controls-center">
-                            <button id="playPause" class="play-btn" title="Play"><i class="fa-solid fa-play"></i></button>
-                        </div>
-
-                        <div class="controls-right">
-                            <button id="next" class="icon-btn" title="Siguiente"><i class="fa-solid fa-forward-step"></i></button>
-                            <button id="loop" class="icon-btn" title="Repetir"><i class="fa-solid fa-repeat"></i></button>
-                            <button id="fullscreen" class="icon-btn" title="Pantalla completa"><i class="fa-solid fa-expand"></i></button>
+                <div class="progress-row">
+                    <span id="timeCurrent" class="time">0:00</span>
+                    <div id="progressWrap" class="progress-wrap" aria-label="Barra de progreso" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                        <div id="progressBar" class="progress-bar">
+                            <div id="progressFill" class="progress-fill"></div>
+                            <div id="progressHandle" class="progress-handle" tabindex="0" aria-label="Posición actual"></div>
                         </div>
                     </div>
-
-                    <div class="progress-row">
-                        <span id="timeCurrent" class="time">0:00</span>
-                        <div id="progressWrap" class="progress-wrap">
-                            <div id="progressBar" class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
-                        </div>
-                        <span id="timeTotal" class="time">0:00</span>
-                    </div>
+                    <span id="timeTotal" class="time">0:00</span>
                 </div>
             </div>
-        `;
+        `
     }
 
-    async #getCss(){
-        return await fast.getCssFile('PlayerBar');
+    async #getCss() { 
+        return await fast.getCssFile("PlayerBar");
     }
 
-    async #render(){
-        let sheet = new CSSStyleSheet();
-        let css = await this.#getCss();
-        sheet.replaceSync(css);
-        this.shadowRoot.adoptedStyleSheets = [...this.shadowRoot.adoptedStyleSheets, sheet];
-        this.template = document.createElement('template');
-        this.template.innerHTML = this.#template();
-        let content = this.template.content.cloneNode(true);
-        this.shadowRoot.appendChild(content);
+    #render() {
+        return new Promise(async (resolve, reject) => {
+            try {
+                let sheet = new CSSStyleSheet();
+                let css = await this.#getCss();
+                sheet.replaceSync(css);
+                this.shadowRoot.adoptedStyleSheets = [sheet];
+                this.template = document.createElement('template');
+                this.template.innerHTML = this.#getTemplate();
+                let tpc = this.template.content.cloneNode(true);  
+                this.mainElement = tpc.firstChild.nextSibling;
+                this.shadowRoot.appendChild(this.mainElement);
 
-        // elements
-        this.$wrapper = this.shadowRoot.querySelector('#playerWrapper');
-        this.$sidebar = this.shadowRoot.querySelector('#playlistSidebar');
-        this.$shuffle = this.shadowRoot.querySelector('#shuffle');
-        this.$prev = this.shadowRoot.querySelector('#prev');
-        this.$playPause = this.shadowRoot.querySelector('#playPause');
-        this.$next = this.shadowRoot.querySelector('#next');
-        this.$loop = this.shadowRoot.querySelector('#loop');
-        this.$fullscreen = this.shadowRoot.querySelector('#fullscreen');
-        this.$timeCurrent = this.shadowRoot.querySelector('#timeCurrent');
-        this.$timeTotal = this.shadowRoot.querySelector('#timeTotal');
-        this.$progressBar = this.shadowRoot.querySelector('#progressBar');
-        this.$progressFill = this.shadowRoot.querySelector('#progressFill');
+                // elements
+                this.$wrapper = this.shadowRoot.querySelector('#playerWrapper');
+                this.$sidebar = this.shadowRoot.querySelector('#playlistSidebar');
+                this.$shuffle = this.shadowRoot.querySelector('#shuffle');
+                this.$prev = this.shadowRoot.querySelector('#prev');
+                this.$playPause = this.shadowRoot.querySelector('#playPause');
+                this.$next = this.shadowRoot.querySelector('#next');
+                this.$loop = this.shadowRoot.querySelector('#loop');
+                this.$fullscreen = this.shadowRoot.querySelector('#fullscreen');
+                this.$timeCurrent = this.shadowRoot.querySelector('#timeCurrent');
+                this.$timeTotal = this.shadowRoot.querySelector('#timeTotal');
+                this.$progressBar = this.shadowRoot.querySelector('#progressBar');
+                this.$progressFill = this.shadowRoot.querySelector('#progressFill');
+                this.$progressHandle = this.shadowRoot.querySelector('#progressHandle');
+                this.$coverImg = this.shadowRoot.querySelector('#coverImg');
+                this.$trackTitle = this.shadowRoot.querySelector('#trackTitle');
+                this.$trackArtist = this.shadowRoot.querySelector('#trackArtist');
+                this.$volumeSlider = this.shadowRoot.querySelector('#volumeSlider');
+                this.$muteToggle = this.shadowRoot.querySelector('#muteToggle');
+                this.$volumeIcon = this.shadowRoot.querySelector('#volumeIcon');
+                resolve(this);
+            } 
+            catch (error) {
+                reject(error);
+            }
+        })
     }
+
+    #checkAttributes() {
+        return new Promise(async (resolve, reject) => {
+            try {
+                for(let attr of this.getAttributeNames()) {          
+                    if(attr.substring(0,2)!="on") {
+                        this[attr] = this.getAttribute(attr);
+                        this.mainElement.setAttribute(attr, this[attr]);
+                    }
+                    else{
+                        let f = this[attr];
+                        this[attr] = ()=>{ if(!this._disabled) f() };
+                    }
+                    switch(attr) {
+                        case 'id' : 
+                            await fast.createInstance('PlayerBar', {'id': this[attr]});
+                            break;
+                    }
+                }
+                resolve(this);
+            } catch (error) {
+                reject(error);
+            }
+        })
+    }
+
+    #checkProps() {
+        return new Promise(async (resolve, reject) => {
+            try {
+                if(this.props) {
+                    for(let attr in this.props) {
+                        switch(attr) {
+                            case 'style' :
+                                for(let attrcss in this.props.style) this.mainElement.style[attrcss] = this.props.style[attrcss];
+                                break;
+                            case 'events' : 
+                                for(let attrevent in this.props.events) {
+                                    this.mainElement.addEventListener(attrevent, ()=>{
+                                        if(!this._disabled)this.props.events[attrevent]()})}
+                                break;
+                            default : 
+                                this.setAttribute(attr, this.props[attr]);
+                                this[attr] = this.props[attr];
+                                if(attr==='id') {
+                                    this.id = this[attr];
+                                    await fast.createInstance('PlayerBar', {'id': this[attr]})
+                                };
+                        }
+                    }
+                }
+                resolve(this);
+            } catch (error) {
+                reject(error);
+            }
+        })
+    }
+    
+    async connectedCallback() {
+        await this.#render();
+        await this.ensureFontAwesome();
+        await this.#checkAttributes();
+        await this.#checkProps();
+        this.setupListeners();
+        this._isBuilt = true;
+        this.built();
+        // Attach underlying media element to wrapper (hidden until video type maybe later)
+        this.mediaController.attachTo(this.$wrapper);
+        this.media = this.mediaController.mediaEl;
+    }
+
+    addToBody() {document.body.appendChild(this);}
 
     #formatTime(sec){
         if(!sec || isNaN(sec)) return '0:00';
@@ -92,20 +201,12 @@ export class PlayerBar extends Fast {
         return `${m}:${s.toString().padStart(2,'0')}`;
     }
 
-    connectedCallback(){
-        this.#render().then(()=>{
-            this.setupListeners();
-            this._isBuilt = true;
-            this.built();
-        })
-    }
-
     setupListeners(){
         this.$playPause.addEventListener('click', ()=>this.togglePlay());
-        this.$prev.addEventListener('click', ()=>this.dispatchEvent(new CustomEvent('player-prev',{bubbles:true})));
-        this.$next.addEventListener('click', ()=>this.dispatchEvent(new CustomEvent('player-next',{bubbles:true})));
+        this.$prev.addEventListener('click', ()=>this.prev());
+        this.$next.addEventListener('click', ()=>this.next());
         this.$shuffle.addEventListener('click', ()=>this.toggleShuffle());
-        this.$loop.addEventListener('click', ()=>this.toggleLoop());
+        this.$loop.addEventListener('click', ()=>this.toggleRepeat());
         this.$fullscreen.addEventListener('click', ()=>this.toggleFullscreen());
 
         // progress click/seek
@@ -114,6 +215,43 @@ export class PlayerBar extends Fast {
             const rect = this.$progressBar.getBoundingClientRect();
             const perc = (e.clientX - rect.left) / rect.width;
             this.media.currentTime = perc * this.media.duration;
+        });
+
+        // Drag seek
+        let seeking = false;
+        const onSeekMove = (e) => {
+            if(!seeking || !this.media) return;
+            const rect = this.$progressBar.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const perc = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+            this.seek(perc * this.media.duration);
+        };
+        this.$progressBar.addEventListener('mousedown', (e)=> { seeking = true; onSeekMove(e); });
+        window.addEventListener('mousemove', onSeekMove);
+        window.addEventListener('mouseup', ()=> seeking = false);
+        this.$progressBar.addEventListener('touchstart', (e)=> { seeking = true; onSeekMove(e); }, { passive: true });
+        window.addEventListener('touchmove', onSeekMove, { passive: true });
+        window.addEventListener('touchend', ()=> seeking = false);
+
+        // Volume events
+        this.$volumeSlider.addEventListener('input', ()=>{
+            const v = this.$volumeSlider.value / 100;
+            this.setVolume(v);
+            this._updateVolumeIcon();
+        });
+        this.$muteToggle.addEventListener('click', ()=>{
+            this.toggleMute();
+            this._updateVolumeIcon();
+        });
+
+        // Keyboard accessibility
+        this.shadowRoot.addEventListener('keydown', (e)=>{
+            if(e.code === 'Space'){ e.preventDefault(); this.togglePlay(); }
+            else if(e.code === 'ArrowRight'){ this.seek((this.media?.currentTime || 0) + 5); }
+            else if(e.code === 'ArrowLeft'){ this.seek((this.media?.currentTime || 0) - 5); }
+            else if(e.code === 'ArrowUp'){ const nv = Math.min(1, (this.media?.volume || 1) + 0.05); this.setVolume(nv); this.$volumeSlider.value = Math.round(nv*100); this._updateVolumeIcon(); }
+            else if(e.code === 'ArrowDown'){ const nv = Math.max(0, (this.media?.volume || 1) - 0.05); this.setVolume(nv); this.$volumeSlider.value = Math.round(nv*100); this._updateVolumeIcon(); }
+            else if(e.key === 'm'){ this.toggleMute(); this._updateVolumeIcon(); }
         });
     }
 
@@ -136,17 +274,122 @@ export class PlayerBar extends Fast {
         this._updatePlayState();
     }
 
+    // --- Public API ---
+    loadMedia(descriptor){
+        // descriptor: { id, src, type, title, artist, cover }
+        if(!descriptor || !descriptor.src) return;
+        this.mediaController.load(descriptor.src, { type: descriptor.type });
+        this.setMedia(this.mediaController.mediaEl);
+        // TODO: persist lastTrackId (descriptor.id)
+        // TODO: update metadata UI (title, artist, cover)
+        eventBus.emit('track:change', descriptor);
+        this._updateMetadata(descriptor);
+        this._ensureVideoVisibility(descriptor.type);
+    }
+
+    play(){
+        if(!this.media) return;
+        this.mediaController.play();
+    }
+
+    pause(){
+        if(!this.media) return;
+        this.mediaController.pause();
+    }
+
+    seek(seconds){
+        this.mediaController.seek(seconds);
+    }
+
+    setVolume(v){
+        this.mediaController.setVolume(v);
+        // TODO: persist volume level
+    }
+
+    toggleMute(){
+        this.mediaController.toggleMute();
+        // TODO: persist mute state
+    }
+
+    setQueue(list){
+        this._queue = Array.isArray(list) ? list : [];
+        this._queueIndex = this._queue.length ? 0 : -1;
+        // TODO: persist queue
+        eventBus.emit('queue:change', { queue: this._queue });
+    }
+
+    next(){
+        if(this._queueIndex < 0 || this._queueIndex >= this._queue.length - 1){
+            // emit end of queue
+            eventBus.emit('queue:end');
+            return;
+        }
+        if(this._shuffle){
+            // pick random different index
+            let idx;
+            do { idx = Math.floor(Math.random()*this._queue.length); } while(idx === this._queueIndex && this._queue.length > 1);
+            this._queueIndex = idx;
+        } else {
+            this._queueIndex++;
+        }
+        const descriptor = this._queue[this._queueIndex];
+        this.loadMedia(descriptor);
+    }
+
+    prev(){
+        if(this._queueIndex <= 0){
+            eventBus.emit('queue:start');
+            return;
+        }
+        this._queueIndex--;
+        const descriptor = this._queue[this._queueIndex];
+        this.loadMedia(descriptor);
+    }
+
+    toggleShuffle(){
+        this._shuffle = !this._shuffle;
+        // TODO: persist shuffle state
+        this._updatePlayState();
+        eventBus.emit('shuffle:change', { shuffle: this._shuffle });
+    }
+
+    toggleRepeat(){
+        this._loop = !this._loop;
+        if(this.media) this.media.loop = this._loop;
+        // TODO: persist repeat state
+        this._updatePlayState();
+        eventBus.emit('repeat:change', { repeat: this._loop });
+    }
+
+    destroy(){
+        this.mediaController.destroy();
+        // TODO: clear persisted position (optional)
+    }
+
+    // --- end Public API ---
+
     _onLoaded(){
         this.$timeTotal.textContent = this.#formatTime(this.media.duration);
     }
 
     _onTimeUpdate(){
         if(!this.media) return;
-        const cur = this.media.currentTime;
-        const dur = this.media.duration || 0;
-        const perc = dur ? (cur/dur)*100 : 0;
-        this.$progressFill.style.width = perc+'%';
-        this.$timeCurrent.textContent = this.#formatTime(cur);
+        this._reflectProgress(this.media.currentTime, this.media.duration || 0);
+    }
+
+    _reflectProgress(cur, dur){
+        const now = performance.now();
+        if(!this._lastProgressUpdate || now - this._lastProgressUpdate > 180){
+            this._lastProgressUpdate = now;
+            const perc = dur ? (cur/dur)*100 : 0;
+            this.$progressFill.style.width = perc+'%';
+            this.$timeCurrent.textContent = this.#formatTime(cur);
+            if(this.$progressHandle){
+                this.$progressHandle.style.left = perc+'%';
+                this.$progressWrap?.setAttribute('aria-valuenow', String(Math.round(perc)));
+            }
+            // TODO: persist currentTime every few seconds
+        }
     }
 
     _onEnded(){
@@ -190,18 +433,14 @@ export class PlayerBar extends Fast {
         this.$shuffle.classList.toggle('active', this._shuffle);
     }
 
+    // Legacy methods maintained for backward compatibility (will emit via new API)
     toggleLoop(){
-        this._loop = !this._loop;
-        if(this.media) this.media.loop = this._loop;
-        this._updatePlayState();
-        this.dispatchEvent(new CustomEvent('player-loop',{detail:{loop:this._loop}, bubbles:true}));
+        this.toggleRepeat();
     }
 
-    toggleShuffle(){
-        this._shuffle = !this._shuffle;
-        this._updatePlayState();
-        this.dispatchEvent(new CustomEvent('player-shuffle',{detail:{shuffle:this._shuffle}, bubbles:true}));
-    }
+    // Original toggleShuffle now calls new API
+    // (method still exists for external code expecting previous name)
+    // Actual implementation above
 
     toggleFullscreen(){
         // prefer media element (video) for fullscreen
@@ -212,8 +451,43 @@ export class PlayerBar extends Fast {
             document.exitFullscreen?.();
         }
     }
+
+    _updateMetadata(descriptor){
+        this.$trackTitle.textContent = descriptor.title || 'Sin título';
+        this.$trackArtist.textContent = descriptor.artist || 'Desconocido';
+        if(descriptor.cover){
+            this.$coverImg.src = descriptor.cover;
+        } else {
+            this.$coverImg.src = '';
+        }
+        // Fade-in cover
+        this.$coverImg.onload = () => {
+            this.$coverImg.classList.add('loaded');
+        };
+    }
+
+    _ensureVideoVisibility(type){
+        if(!this.media) return;
+        if(type === 'video'){ this.media.style.display = 'block'; }
+        else { this.media.style.display = 'none'; }
+        // TODO: lazy initialize visualization hook for video if needed
+    }
+
+    _updateVolumeIcon(){
+        if(!this.media) return;
+        const v = this.media.volume;
+        if(this.media.muted || v === 0){ this.$volumeIcon.className = 'fa-solid fa-volume-xmark'; }
+        else if(v < 0.33){ this.$volumeIcon.className = 'fa-solid fa-volume-low'; }
+        else { this.$volumeIcon.className = 'fa-solid fa-volume-high'; }
+    }
+
+    attachVisualizer(callback){
+        // Store callback to invoke with future waveform/analyser data
+        this._visualizerCallback = callback;
+        // TODO: integrate WebAudio analyser and emit waveformData periodically
+    }
 }
 
-if(!customElements.get('player-bar')){
-    customElements.define('player-bar', PlayerBar);
+if (!customElements.get ('player-bar')) {
+    customElements.define ('player-bar', PlayerBar);
 }

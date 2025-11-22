@@ -149,3 +149,76 @@ Después de generar el componente, edita:
 ## Ejemplo completo
 
 Ver el archivo HTML generado en `examples/` para un ejemplo funcional.
+
+## PlayerBar (Componente de Reproducción)
+
+El componente `player-bar` proporciona una barra de reproducción tipo Spotify con soporte para audio y video, cola, shuffle, repeat, volumen y estado desacoplado mediante `EventBus`.
+
+### API Pública
+
+Métodos principales:
+
+- `loadMedia(descriptor)`: Carga un medio. `descriptor = { id, src, type: 'audio'|'video', title, artist, cover }`
+- `play()` / `pause()` / `togglePlay()`
+- `seek(segundos)`
+- `setVolume(fracción)` (0–1)
+- `toggleMute()`
+- `setQueue(array)` Establece la cola y empieza desde índice 0.
+- `next()` / `prev()` Avanza retrocede en la cola (respeta shuffle)
+- `toggleShuffle()`
+- `toggleRepeat()` (loop simple)
+- `destroy()` Limpia recursos internos.
+- `attachVisualizer(callback)` Pivote para futura integración de visualización de waveform.
+
+### Eventos (EventBus)
+
+Se emiten a través del `eventBus`:
+- `media:loaded` -> `{ duration, type }`
+- `play` / `pause` / `ended`
+- `error` -> Error del elemento media
+- `progress` -> `{ currentTime, duration }` (throttle interno ~180ms)
+- `volume:change` -> `{ volume, muted }`
+- `mute:change` -> `{ muted }`
+- `track:change` -> Descriptor completo del track
+- `queue:change` -> `{ queue }`
+- `queue:end` / `queue:start`
+- `shuffle:change` -> `{ shuffle }`
+- `repeat:change` -> `{ repeat }`
+
+### Persistencia (TODO)
+
+Existen comentarios `// TODO:` en el código para insertar más adelante la lógica con `LocalStorageManager` y/o `IndexedDBManager` para:
+- Último track (`id` y `src`)
+- Posición de reproducción periódica
+- Volumen y estado mute
+- Estado shuffle / repeat
+- Cola completa e índice actual
+
+### Uso rápido
+
+```html
+<script type="module" src="./src/js/lib/Fast.js"></script>
+<script type="module" src="./src/js/components/PlayerBar.js"></script>
+<player-bar id="player1"></player-bar>
+<script type="module">
+    import { eventBus } from './src/js/lib/EventBus.js';
+    const pb = fast.getInstance('player1');
+    pb.loadMedia({ id:'t1', src:'track.mp3', type:'audio', title:'Track 1', artist:'Artista' });
+    pb.play();
+    eventBus.on('progress', ({currentTime,duration}) => {/* actualizar UI externa si se desea */});
+</script>
+```
+
+### Estilos y Responsivo
+
+`PlayerBar.css` aplica paleta oscura `#121212` con acento `#1DB954` y se adapta en breakpoints ocultando metadata y reduciendo tamaño de botones en móviles.
+
+### Accesibilidad
+
+- Botones con `aria-label`
+- Navegación teclado: `Space` (play/pause), `ArrowLeft/Right` (seek ±5s), `ArrowUp/Down` (volumen ±5%), `m` (mute)
+
+### Ejemplo avanzado
+
+Revisar `examples/PlayerBar.html` para cola con audio y video, shuffle y repeat.
+
