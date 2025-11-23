@@ -94,10 +94,10 @@ html, body, #app { height:100%; }
 	gap: var(--app-gap);
 }
 
-.app-sidebar { grid-area: sidebar; }
-.app-header { grid-area: header; }
-.app-content { grid-area: content; position: relative; overflow-y:auto; scrollbar-gutter: stable; padding: 0 24px; animation: fadeIn 400ms ease; }
-.app-player { grid-area: player; }
+.app-sidebar { grid-area: sidebar; animation: fadeInFromLeft 400ms ease; }
+.app-header { grid-area: header; animation: fadeInFromTop 400ms ease; }
+.app-content { grid-area: content; position: relative; overflow-y:auto; scrollbar-gutter: stable; padding: 0 24px; animation: fadeIn 600ms ease; }
+.app-player { grid-area: player; animation: fadeIn 400ms ease; }
 
 /* Scrollbar styling (WebKit + Firefox) */
 .app-content::-webkit-scrollbar { width:10px; }
@@ -121,7 +121,16 @@ html, body, #app { height:100%; }
 .app-content-placeholder p { margin:0; font-size: var(--fs-md); color:#b3b3b3; }
 
 /* Generic fade-in utility */
-@keyframes fadeIn { from { opacity:0; transform:translateY(4px);} to { opacity:1; transform:translateY(0);} }
+@keyframes fadeIn { from { opacity:0; transform:translateY(8px);} to { opacity:1; transform:translateY(0);} }
+@keyframes fadeInFromLeft {
+	from { opacity:0; transform:translateX(-8px);}
+	to { opacity:1; transform:translateX(0);}
+}
+@keyframes fadeInFromTop {
+	from { opacity:0; transform:translateY(-8px);}
+	to { opacity:1; transform:translateY(0);}
+}
+
 .fade-in { animation: fadeIn 340ms ease; }
 
 /* Panel surfaces unify look (applied by components) */
