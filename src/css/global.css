@@ -96,7 +96,7 @@ html, body, #app { height:100%; }
 
 .app-sidebar { grid-area: sidebar; }
 .app-header { grid-area: header; }
-.app-content { grid-area: content; position: relative; overflow-y:auto; scrollbar-gutter: stable; padding: 0 24px; }
+.app-content { grid-area: content; position: relative; overflow-y:auto; scrollbar-gutter: stable; padding: 0 24px; animation: fadeIn 400ms ease; }
 .app-player { grid-area: player; }
 
 /* Scrollbar styling (WebKit + Firefox) */
