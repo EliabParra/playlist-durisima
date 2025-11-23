@@ -142,3 +142,14 @@ html, body, #app { height:100%; }
 	:root { --app-gap: 10px; }
 	.app-shell { padding: var(--app-gap); gap: var(--app-gap); }
 }
+
+/* ===================== Layout Stability with SweetAlert2 ===================== */
+/* Previene salto de layout cuando SweetAlert2 elimina scrollbar y cambia height */
+html, body { min-height:100dvh; }
+/* body { overflow-y: scroll; scrollbar-gutter: stable; } */
+/* SweetAlert2 aplica .swal2-height-auto → forzamos a mantener altura total */
+html.swal2-height-auto, body.swal2-height-auto { height:100%; }
+/* Asegura que el grid no se colapse bajo overlay */
+body.swal2-shown .app-shell { height:100dvh; min-height:100dvh; }
+/* Refuerzo para #app contenedor raíz */
+#app { min-height:100dvh; }

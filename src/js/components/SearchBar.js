@@ -145,7 +145,7 @@ export class SearchBar extends Fast {
             title: 'Subir Archivos',
             theme: 'dark',
             html: `
-                <div id="dropArea" class="custom-drop-zone">
+                <div id="dropArea" class="custom-drop-zone" style="margin-top: 0;">
                     <div class="drop-icon"><i class="fa-solid fa-upload"></i></div>
                     <p class="drop-text">Arrastra tu archivo aquí o haz click</p>
                     <input type="file" id="fileElem" multiple accept="${C.FILE_TYPES.VIDEO.join(', ')}, ${C.FILE_TYPES.AUDIO.join(', ')}" style="display:none">
