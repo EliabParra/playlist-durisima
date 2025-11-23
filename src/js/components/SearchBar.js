@@ -134,7 +134,8 @@ export class SearchBar extends Fast {
     }
 
     search(query) {
-        // TODO: buscar archivos en la playlist
+        // TODO: buscar archivos en la playlist (futura IndexedDB / cache)
+        this.dispatchEvent(new CustomEvent('search:query', { detail:{ query } }));
     }
 
     showAddFiles() {

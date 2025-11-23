@@ -12,6 +12,18 @@
 	--fs-lg: 22px;
 	--fs-xl: 28px;
 	--fs-2xl: 34px;
+
+	/* Layout variables */
+	--sidebar-width: 88px;
+	--header-height: 86px;
+	--player-height: 120px;
+	--app-gap: 14px;
+	--app-radius: 18px;
+	--bg-app: #0e0e0e;
+	--bg-panel: #121212;
+	--scrollbar-thumb: #2a2a2a;
+	--scrollbar-thumb-hover: #333;
+	--accent: #1DB954;
 }
 
 html { font-size: 100%; font-family: var(--font-sans); }
@@ -23,6 +35,8 @@ body {
 	-webkit-font-smoothing: antialiased;
 	text-rendering: optimizeLegibility;
 	margin: 0;
+	background: var(--bg-app);
+	color: #fff;
 }
 
 h1, h2, h3, h4, h5, h6 { font-weight: 600; line-height: 1.15; letter-spacing: .5px; }
@@ -61,4 +75,70 @@ h6 { font-size: var(--fs-sm); }
 /* Accesibilidad: reducir animaciones en usuarios con preferencia */
 @media (prefers-reduced-motion: reduce) {
 	* { animation-duration: .01ms; animation-iteration-count: 1; transition-duration: .01ms; }
+}
+
+/* ===================== App Shell Layout ===================== */
+html, body, #app { height:100%; }
+
+.app-shell {
+	display: grid;
+	grid-template-areas:
+		"sidebar header"
+		"sidebar content"
+		"sidebar player";
+	grid-template-columns: var(--sidebar-width) 1fr;
+	grid-template-rows: var(--header-height) 1fr var(--player-height);
+	height: 100vh;
+	padding: var(--app-gap);
+	box-sizing: border-box;
+	gap: var(--app-gap);
+}
+
+.app-sidebar { grid-area: sidebar; }
+.app-header { grid-area: header; }
+.app-content { grid-area: content; position: relative; overflow-y:auto; scrollbar-gutter: stable; padding: 0 24px; }
+.app-player { grid-area: player; }
+
+/* Scrollbar styling (WebKit + Firefox) */
+.app-content::-webkit-scrollbar { width:10px; }
+.app-content::-webkit-scrollbar-track { background: transparent; }
+.app-content::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 20px; }
+.app-content::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+.app-content { scrollbar-color: var(--scrollbar-thumb) transparent; scrollbar-width: thin; }
+
+/* Placeholder styling */
+.app-content-placeholder {
+	max-width: 520px;
+	margin: 60px auto 0;
+	background: var(--bg-panel);
+	padding: 32px 40px;
+	border-radius: var(--app-radius);
+	box-shadow: 0 4px 18px -6px rgba(0,0,0,0.6),0 0 0 1px rgba(255,255,255,0.05);
+	text-align: center;
+	animation: fadeIn 420ms ease;
+}
+.app-content-placeholder h2 { margin:0 0 12px; font-size: var(--fs-xl); font-weight:600; }
+.app-content-placeholder p { margin:0; font-size: var(--fs-md); color:#b3b3b3; }
+
+/* Generic fade-in utility */
+@keyframes fadeIn { from { opacity:0; transform:translateY(4px);} to { opacity:1; transform:translateY(0);} }
+.fade-in { animation: fadeIn 340ms ease; }
+
+/* Panel surfaces unify look (applied by components) */
+.app-sidebar, .app-header, .app-player { border-radius: var(--app-radius); }
+
+/* Responsive adjustments */
+@media (max-width: 840px){
+	:root { --sidebar-width: 76px; --player-height: 170px; }
+}
+@media (max-width: 680px){
+	.app-shell { grid-template-areas:
+		"header header"
+		"content content"
+		"player player"; grid-template-columns: 1fr 1fr; grid-template-rows: var(--header-height) 1fr var(--player-height); }
+	.app-sidebar { display:none; }
+}
+@media (max-width: 520px){
+	:root { --app-gap: 10px; }
+	.app-shell { padding: var(--app-gap); gap: var(--app-gap); }
 }

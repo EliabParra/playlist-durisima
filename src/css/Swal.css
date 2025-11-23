@@ -132,6 +132,7 @@
     border: 2px dashed rgba(255,255,255,0.08);
     border-radius: 16px;
     padding: 26px 22px;
+    margin-top: 28px;
     text-align: center;
     cursor: pointer;
     transition: border-color 200ms ease, background 200ms ease, transform 260ms ease;
