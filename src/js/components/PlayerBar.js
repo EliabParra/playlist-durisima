@@ -29,8 +29,54 @@ export class PlayerBar extends Fast {
             // TODO: persist currentTime periodically for resume feature
         });
         eventBus.on('volume:change', ({ volume, muted })=> {
-            // Future: reflect UI volume slider icon state
+            try {
+                if (this.$volumeSlider) this.$volumeSlider.value = Math.round((volume ?? 1) * 100);
+            } catch(e){}
+            try { this._updateVolumeIcon(); } catch(e){}
         });
+
+        // Stop/reset if the currently playing track is deleted elsewhere
+        eventBus.on('track:deleted', ({ id }) => {
+            try {
+                const current = this._queue[this._queueIndex];
+                if (current && Number(current.id) === Number(id)) {
+                    // use public reset if available
+                    try { this.reset(); return; } catch(e){}
+                    // fallback: manual reset
+                    try { this.pause(); } catch(e){}
+                    try { this.setQueue([]); } catch(e){}
+                    this._queueIndex = -1;
+                    try { this._updateMetadata({ title: 'Sin título', artist: 'Desconocido' }); } catch(e){}
+                    try { if (this.$timeCurrent) this.$timeCurrent.textContent = '0:00'; } catch(e){}
+                    try { if (this.$timeTotal) this.$timeTotal.textContent = '0:00'; } catch(e){}
+                    try { if (this.$progressFill) this.$progressFill.style.width = '0%'; } catch(e){}
+                    try { if (this.$progressHandle) this.$progressHandle.style.left = '0%'; } catch(e){}
+                    // clear any video stage if present
+                    try {
+                        const main = document.querySelector('main-content');
+                        const videoStage = main?.shadowRoot?.querySelector('#video-stage');
+                        if (videoStage) { videoStage.classList.remove('active'); videoStage.innerHTML = ''; }
+                    } catch(e){}
+                }
+            } catch(e) { console.error(e); }
+        });
+
+        // Public reset method bound here
+        this.reset = () => {
+            try { this.pause(); } catch(e){}
+            try { this.setQueue([]); } catch(e){}
+            this._queueIndex = -1;
+            try { this._updateMetadata({ title: 'Sin título', artist: 'Desconocido' }); } catch(e){}
+            try { if (this.$timeCurrent) this.$timeCurrent.textContent = '0:00'; } catch(e){}
+            try { if (this.$timeTotal) this.$timeTotal.textContent = '0:00'; } catch(e){}
+            try { if (this.$progressFill) this.$progressFill.style.width = '0%'; } catch(e){}
+            try { if (this.$progressHandle) this.$progressHandle.style.left = '0%'; } catch(e){}
+            try {
+                const main = document.querySelector('main-content');
+                const videoStage = main?.shadowRoot?.querySelector('#video-stage');
+                if (videoStage) { videoStage.classList.remove('active'); videoStage.innerHTML = ''; }
+            } catch(e){}
+        };
     }
 
     #getTemplate() { 
@@ -40,9 +86,10 @@ export class PlayerBar extends Fast {
                     <div class="metadata" id="metadata" aria-live="polite">
                         <div class="cover" id="coverWrap">
                             <img id="coverImg" alt="Cover" />
+                            <div class="cover-media-icon" id="coverMediaIcon"><i class="fa-solid fa-music"></i></div>
                         </div>
                         <div class="track-info" id="trackInfo">
-                            <div class="title" id="trackTitle">Sin título</div>
+                            <div class="title" id="trackTitle"><span class="title-text">Sin título</span></div>
                             <div class="artist" id="trackArtist">Desconocido</div>
                         </div>
                     </div>
@@ -109,6 +156,7 @@ export class PlayerBar extends Fast {
                 this.$progressFill = this.shadowRoot.querySelector('#progressFill');
                 this.$progressHandle = this.shadowRoot.querySelector('#progressHandle');
                 this.$coverImg = this.shadowRoot.querySelector('#coverImg');
+                    this.$coverMediaIcon = this.shadowRoot.querySelector('#coverMediaIcon');
                 this.$trackTitle = this.shadowRoot.querySelector('#trackTitle');
                 this.$trackArtist = this.shadowRoot.querySelector('#trackArtist');
                 this.$volumeSlider = this.shadowRoot.querySelector('#volumeSlider');
@@ -189,6 +237,11 @@ export class PlayerBar extends Fast {
         // Attach underlying media element to wrapper (hidden until video type maybe later)
         this.mediaController.attachTo(this.$wrapper);
         this.media = this.mediaController.mediaEl;
+        // sync UI volume to current media controller values
+        try {
+            this.$volumeSlider.value = Math.round((this.media?.volume ?? 1) * 100);
+        } catch(e){}
+        this._updateVolumeIcon();
     }
 
     addToBody() {document.body.appendChild(this);}
@@ -271,7 +324,18 @@ export class PlayerBar extends Fast {
         this.media.addEventListener('ended', this._endedHandler);
         // set initial UI
         this.$timeTotal.textContent = this.#formatTime(this.media.duration);
+        // sync volume slider and mute/icon state
+        try {
+            this.$volumeSlider.value = Math.round((this.media.volume ?? 1) * 100);
+        } catch(e){}
+        this._updateVolumeIcon();
         this._updatePlayState();
+        // update fullscreen visibility and cover icon according to media element type
+        try {
+            const isVideo = (this.media && this.media.tagName && this.media.tagName.toLowerCase() === 'video');
+            this._setFullscreenVisible(Boolean(isVideo));
+            this._setCoverIcon(isVideo ? 'video' : 'audio');
+        } catch(e){}
     }
 
     // --- Public API ---
@@ -283,6 +347,9 @@ export class PlayerBar extends Fast {
         eventBus.emit('track:change', descriptor);
         this._updateMetadata(descriptor);
         this._ensureVideoVisibility(descriptor.type);
+        // also update fullscreen button and cover icon
+        try { this._setFullscreenVisible(descriptor.type === 'video'); } catch(e){}
+        try { this._setCoverIcon(descriptor.type === 'video' ? 'video' : 'audio'); } catch(e){}
     }
 
     play() {
@@ -332,9 +399,24 @@ export class PlayerBar extends Fast {
         }
         const descriptor = this._queue[this._queueIndex];
         this.loadMedia(descriptor);
+        // autoplay the newly loaded track (user gesture from next/prev click)
+        try { this.play(); } catch(e){}
     }
 
     prev() {
+        // If current media exists and has played more than 5 seconds, restart it
+        try {
+            const curMedia = this.media;
+            const currentTime = curMedia?.currentTime ?? 0;
+            if (currentTime > 5) {
+                // restart current track
+                try { this.seek(0); } catch(e){}
+                try { this.play(); } catch(e){}
+                return;
+            }
+        } catch(e) {}
+
+        // Otherwise go to previous track in queue (if any)
         if (this._queueIndex <= 0) {
             eventBus.emit('queue:start');
             return;
@@ -342,6 +424,8 @@ export class PlayerBar extends Fast {
         this._queueIndex--;
         const descriptor = this._queue[this._queueIndex];
         this.loadMedia(descriptor);
+        // autoplay the newly loaded track (user gesture from prev click)
+        try { this.play(); } catch(e){}
     }
 
     toggleShuffle() {
@@ -451,7 +535,11 @@ export class PlayerBar extends Fast {
     }
 
     _updateMetadata(descriptor) {
-        this.$trackTitle.textContent = descriptor.title || 'Sin título';
+        const titleText = descriptor.title || 'Sin título';
+        // ensure inner span updated
+        const span = this.$trackTitle.querySelector('.title-text');
+        if (span) span.textContent = titleText;
+        else this.$trackTitle.textContent = titleText;
         this.$trackArtist.textContent = descriptor.artist || 'Desconocido';
         if (descriptor.cover) {
             this.$coverImg.src = descriptor.cover;
@@ -462,6 +550,28 @@ export class PlayerBar extends Fast {
         this.$coverImg.onload = () => {
             this.$coverImg.classList.add('loaded');
         };
+        // marquee behavior: if title overflows, apply animation
+        try {
+            const container = this.$trackTitle;
+            const inner = this.$trackTitle.querySelector('.title-text');
+            if (container && inner) {
+                // reset
+                container.classList.remove('marquee');
+                inner.style.animationDuration = '';
+                // small timeout to allow layout
+                requestAnimationFrame(()=>{
+                    const overflow = inner.scrollWidth > container.clientWidth + 4; // small threshold
+                    if (overflow) {
+                        container.classList.add('marquee');
+                        const distance = inner.scrollWidth - container.clientWidth;
+                        // duration proportional to distance (px) -> seconds, plus a pause
+                        const speed = 0.02; // seconds per pixel
+                        const dur = Math.max(4, Math.ceil(distance * speed));
+                        inner.style.animationDuration = dur + 's';
+                    }
+                });
+            }
+        } catch(e){}
     }
 
     _ensureVideoVisibility(type) {
@@ -469,6 +579,31 @@ export class PlayerBar extends Fast {
         if (type === 'video') { this.media.style.display = 'block'; }
         else { this.media.style.display = 'none'; }
         // TODO: lazy initialize visualization hook for video if needed
+    }
+
+    _setFullscreenVisible(visible) {
+        try {
+            if (!this.$fullscreen) return;
+            // use visibility instead of display so the layout (slider position) doesn't shift
+            this.$fullscreen.style.visibility = visible ? '' : 'hidden';
+            this.$fullscreen.setAttribute('aria-hidden', visible ? 'false' : 'true');
+        } catch(e){}
+    }
+
+    _setCoverIcon(kind) {
+        // kind: 'audio' | 'video'
+        try {
+            if (!this.$coverMediaIcon) return;
+            const icon = this.$coverMediaIcon.querySelector('i');
+            if (!icon) return;
+            if (kind === 'video') {
+                icon.className = 'fa-solid fa-video';
+            } else {
+                icon.className = 'fa-solid fa-music';
+            }
+            // ensure visible
+            this.$coverMediaIcon.style.display = '';
+        } catch(e){}
     }
 
     _updateVolumeIcon() {

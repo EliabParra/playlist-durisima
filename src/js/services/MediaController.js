@@ -8,6 +8,15 @@ export class MediaController {
   constructor({ initialType = 'audio' } = {}) {
     this.type = initialType; // 'audio' | 'video'
     this.mediaEl = null;
+    // restore last known volume/mute from localStorage when possible
+    try {
+      const sv = localStorage.getItem('player_volume');
+      this._lastVolume = sv !== null ? Math.max(0, Math.min(parseFloat(sv), 1)) : 1;
+    } catch (e) { this._lastVolume = 1; }
+    try {
+      const sm = localStorage.getItem('player_muted');
+      this._lastMuted = sm !== null ? (sm === '1') : false;
+    } catch (e) { this._lastMuted = false; }
     this._createElement();
     this._bindNativeEvents();
   }
@@ -20,6 +29,9 @@ export class MediaController {
     el.preload = 'metadata';
     el.crossOrigin = 'anonymous';
     el.style.display = this.type === 'video' ? 'block' : 'none'; // video hidden until UI decides
+    // ensure new element picks up last known volume/mute state
+    if (typeof this._lastVolume === 'number') el.volume = this._lastVolume;
+    if (typeof this._lastMuted === 'boolean') el.muted = this._lastMuted;
     this.mediaEl = el;
   }
 
@@ -86,13 +98,19 @@ export class MediaController {
   }
 
   setVolume(v) {
-    this.mediaEl.volume = Math.max(0, Math.min(v, 1));
-    // TODO: persist volume level
+    const vol = Math.max(0, Math.min(v, 1));
+    this.mediaEl.volume = vol;
+    this._lastVolume = vol;
+    try { localStorage.setItem('player_volume', String(vol)); } catch(e){}
+    // emit event to notify UI
+    eventBus.emit('volume:change', { volume: this.mediaEl.volume, muted: this.mediaEl.muted });
   }
 
   toggleMute() {
     this.mediaEl.muted = !this.mediaEl.muted;
-    // TODO: persist mute state
+    this._lastMuted = this.mediaEl.muted;
+    try { localStorage.setItem('player_muted', this._lastMuted ? '1' : '0'); } catch(e){}
+    // emit event to notify UI
     eventBus.emit('mute:change', { muted: this.mediaEl.muted });
   }
 

@@ -159,6 +159,7 @@ export class SideBar extends Fast {
       preConfirm: () => {
         const playlistName = Swal.getPopup().querySelector('#playlistName').value.trim();
         if(!playlistName) { Swal.showValidationMessage('El nombre es obligatorio'); return false; }
+        if (playlistName.length > 85) { Swal.showValidationMessage('El nombre no puede superar 85 caracteres'); return false; }
         return { name: playlistName, files: filesStorage };
       }
     }).then(async (res) => {
@@ -186,17 +187,28 @@ export class SideBar extends Fast {
 
   updatePlaylistList() {
     this.$playlistList.innerHTML = '';
-    for(const pl of this.playlists) {
+    for (const pl of this.playlists) {
       const li = document.createElement('li');
-      li.textContent = pl.name.split(' ').map(w=>w[0]).join('');
+      // Mostrar iniciales: primera letra de cada palabra, máximo 4 letras. Si hay más de 4 palabras, añadir '…'
+      try {
+        const words = String(pl.name || '').trim().split(/\s+/).filter(Boolean);
+        const initials = words.map(w => (w[0] || '').toUpperCase()).join('');
+        let display = initials;
+        if (words.length > 4) {
+          display = initials.slice(0, 4) + '…';
+        }
+        li.textContent = display || (pl.name ? pl.name[0].toUpperCase() : '');
+      } catch (e) {
+        li.textContent = pl.name ? String(pl.name).slice(0,4) : '';
+      }
       li.dataset.id = pl.id;
       li.className = 'playlist-item' + (pl.id === this._selectedPlaylistId ? ' selected' : '');
       li.title = `${pl.name} (${pl.filesCount} archivos)`;
-      li.addEventListener('click', ()=>{
+      li.addEventListener('click', () => {
         this._selectedPlaylistId = pl.id;
         this._persistState();
         this.updatePlaylistList();
-        this.dispatchEvent(new CustomEvent('playlist:selected', { detail:{ id: pl.id }}));
+        this.dispatchEvent(new CustomEvent('playlist:selected', { detail: { id: pl.id } }));
       });
       this.$playlistList.appendChild(li);
     }

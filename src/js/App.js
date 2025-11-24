@@ -39,6 +39,25 @@ class MainContent extends Fast {
                     overflow-y: auto; /* Scroll solo en la lista */
                     padding-bottom: 80px; /* Espacio para el player bar */
                 }
+                /* pulse animation when search reset occurs */
+                .pulse { animation: playlist-pulse 700ms ease; }
+                @keyframes playlist-pulse {
+                    0% { transform: scale(1); box-shadow: 0 0 0 rgba(0,0,0,0); }
+                    30% { transform: scale(1.009); box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+                    100% { transform: scale(1); box-shadow: 0 0 0 rgba(0,0,0,0); }
+                }
+                /* playlist transition and track hover styles */
+                .view-playlist.fade-in { animation: playlist-fade-in 260ms ease; }
+                @keyframes playlist-fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
+
+                .track-list { display:flex; flex-direction:column; gap:0; }
+                .track-row { transition: background-color 160ms ease, transform 140ms ease, box-shadow 140ms ease; border-bottom:1px solid #444; padding:10px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; }
+                .track-row.fade-in { animation: track-fade 220ms ease; }
+                .track-row.fade-in { animation-fill-mode: both; }
+                @keyframes track-fade { from { opacity:0; transform: translateY(6px);} to { opacity:1; transform: translateY(0);} }
+                .track-row:hover { background: rgba(255,255,255,0.03); transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,0.12); }
+                .track-row.active { background: rgba(29,185,84,0.08); box-shadow: 0 6px 18px rgba(29,185,84,0.06); border-left:4px solid #1DB954; transform: none; }
+                .track-row .track-info { flex-grow:1; }
             </style>
 
             <div class="layout">
@@ -78,7 +97,7 @@ class MainContent extends Fast {
             
             // Generar HTML con botón de borrar
             const listHtml = tracks.map((t, index) => `
-                <div class="track-row" data-index="${index}" style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid #444; cursor:pointer;">
+                <div class="track-row fade-in" data-index="${index}" data-id="${t.id}" style="display:flex; justify-content:space-between; align-items:center; padding:10px; animation-delay:${index*60}ms;">
                     <div class="track-info" style="flex-grow:1">
                         <strong>${index+1}.</strong> ${t.title} 
                         <span style="font-size:0.8em; color:#aaa; margin-left:10px;">${t.type.toUpperCase()}</span>
@@ -121,11 +140,39 @@ class MainContent extends Fast {
                         confirmButtonColor: '#d33'
                     }).then(async (r) => {
                         if (r.isConfirmed) {
-                            await musicDB.deleteTrack(parseInt(btn.dataset.id));
-                            // Recargar vista actual
-                            this.renderPlaylist(playlistId);
-                            eventBus.emit('playlist:updated'); // Actualizar contador sidebar
-                            Swal.fire('Archivo eliminado', '', 'success');
+                                const deletedId = parseInt(btn.dataset.id);
+                                await musicDB.deleteTrack(deletedId);
+                                // Si la pista eliminada es la que se está reproduciendo, detener y resetear el player
+                                try {
+                                    if (this.playerBar && this.playerBar._queueIndex >= 0) {
+                                        const current = this.playerBar._queue[this.playerBar._queueIndex];
+                                        if (current && current.id === deletedId) {
+                                            // Pausar reproducción
+                                            try { this.playerBar.pause(); } catch(e){}
+                                            // Limpiar cola y estado
+                                            try { this.playerBar.setQueue([]); } catch(e){}
+                                            this.playerBar._queueIndex = -1;
+                                            // Resetear metadata y progress UI
+                                            try {
+                                                this.playerBar._updateMetadata({ title: 'Sin título', artist: 'Desconocido' });
+                                                if (this.playerBar.$timeCurrent) this.playerBar.$timeCurrent.textContent = '0:00';
+                                                if (this.playerBar.$timeTotal) this.playerBar.$timeTotal.textContent = '0:00';
+                                                if (this.playerBar.$progressFill) this.playerBar.$progressFill.style.width = '0%';
+                                                if (this.playerBar.$progressHandle) this.playerBar.$progressHandle.style.left = '0%';
+                                            } catch(e){}
+                                            // Limpiar video stage si estaba activo
+                                            try {
+                                                const videoContainer = this.mainContent.shadowRoot.querySelector('#video-stage');
+                                                if (videoContainer) { videoContainer.classList.remove('active'); videoContainer.innerHTML = ''; }
+                                            } catch(e){}
+                                        }
+                                    }
+                                } catch(e) { console.error(e); }
+
+                                // Recargar vista actual
+                                this.renderPlaylist(playlistId);
+                                eventBus.emit('playlist:updated'); // Actualizar contador sidebar
+                                Swal.fire('Archivo eliminado', '', 'success');
                         }
                     })
                 });
@@ -200,7 +247,9 @@ class App {
 		// Montar en contenedores
 		this.$sidebarContainer.appendChild(this.sideBar);
 		this.$searchbarContainer.appendChild(this.searchBar);
-		this.$playerbarContainer.appendChild(this.playerBar);
+        this.$playerbarContainer.appendChild(this.playerBar);
+        // Hide playerbar by default; only show when playback occurs
+        try { this.$playerbarContainer.style.display = 'none'; } catch(e) {}
 		this.$contentContainer.appendChild(this.mainContent);
 	}
 
@@ -236,6 +285,43 @@ class App {
                 this.playerBar._queueIndex = startIndex; 
                 this.playerBar.play();
             }
+        });
+
+        // Fallback: permitir que SearchBar emita 'playlist:show' para re-mostrar la playlist actual
+        eventBus.on('playlist:show', ({ id }) => {
+            if (id) this.mainContent.renderPlaylist(id);
+        });
+
+        // Visual cue when search resets the playlist: add a pulse animation to main content
+        eventBus.on('playlist:reset', ({ id }) => {
+            try {
+                const main = this.mainContent;
+                const container = main?.shadowRoot?.querySelector('#mainContent');
+                if (container) {
+                    container.classList.add('pulse');
+                    setTimeout(() => container.classList.remove('pulse'), 700);
+                }
+            } catch(e) { console.error(e); }
+        });
+
+        // Mark active track row when player changes track
+        eventBus.on('track:change', ({ id }) => {
+            try {
+                const main = this.mainContent;
+                const container = main?.shadowRoot?.querySelector('#mainContent');
+                if (!container) return;
+                const rows = container.querySelectorAll('.track-row');
+                rows.forEach(r => r.classList.remove('active'));
+                if (id === undefined || id === null) return;
+                for (const r of rows) {
+                    if (String(r.dataset.id) === String(id)) {
+                        r.classList.add('active');
+                        // ensure visible
+                        r.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        break;
+                    }
+                }
+            } catch(e) { console.error(e); }
         });
 
         // --- ARREGLO DEL VIDEO QUE NO SE VE ---
@@ -278,6 +364,19 @@ class App {
                 if(playerWrapper) playerWrapper.appendChild(el);
                 el.style.display = 'none';
             }
+        });
+
+        // Show/hide playerbar based on playback state
+        eventBus.on('play', () => {
+            try { this.$playerbarContainer.style.display = ''; } catch(e) {}
+        });
+        // Do not hide playerbar on pause — keep visible so user can resume.
+        eventBus.on('ended', () => {
+            try { this.$playerbarContainer.style.display = 'none'; } catch(e) {}
+        });
+        // Also hide when a track is deleted (in case it was the current)
+        eventBus.on('track:deleted', () => {
+            try { this.$playerbarContainer.style.display = 'none'; } catch(e) {}
         });
 	}
 }

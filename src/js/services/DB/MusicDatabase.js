@@ -1,3 +1,5 @@
+import { eventBus } from '../../lib/EventBus.js';
+
 export class MusicDatabase {
     constructor() {
         this.dbName = 'UniPlayerDB';
@@ -114,7 +116,11 @@ export class MusicDatabase {
         
         const tx = this.db.transaction(['tracks'], 'readwrite');
         tx.objectStore('tracks').delete(trackId);
-        return new Promise(resolve => tx.oncomplete = resolve);
+        return new Promise(resolve => tx.oncomplete = () => {
+            // notify listeners that a track was deleted
+            try { eventBus.emit('track:deleted', { id: trackId }); } catch(e){}
+            resolve();
+        });
     }
 
     // --- BUSQUEDA ---

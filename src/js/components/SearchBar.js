@@ -137,6 +137,16 @@ export class SearchBar extends Fast {
                 if (query) {
                     // Emitimos evento para que App.js maneje la vista
                     eventBus.emit('search:query', { query });
+                } else {
+                    // Si la búsqueda está vacía, re-mostrar la playlist actual (misma acción que click en la playlist)
+                    const currentId = LocalStorageManager.getItem('ui.currentPlaylistId');
+                    if (currentId) {
+                        // Preferir método directo si fue inyectado por App
+                        try { if (typeof this.renderPlaylist === 'function') { this.renderPlaylist(currentId); eventBus.emit('playlist:reset', { id: currentId }); return; } } catch(e){}
+                        // Fallback: emitir evento para que quien corresponda lo maneje
+                        eventBus.emit('playlist:show', { id: currentId });
+                        eventBus.emit('playlist:reset', { id: currentId });
+                    }
                 }
             }
         });
@@ -144,7 +154,16 @@ export class SearchBar extends Fast {
         // Opcional: Búsqueda al hacer click en la lupa
         this.$searchInput.nextElementSibling?.addEventListener('click', () => {
             const query = this.$searchInput.value.trim();
-            if (query) eventBus.emit('search:query', { query });
+            if (query) {
+                eventBus.emit('search:query', { query });
+            } else {
+                const currentId = LocalStorageManager.getItem('ui.currentPlaylistId');
+                if (currentId) {
+                    try { if (typeof this.renderPlaylist === 'function') { this.renderPlaylist(currentId); eventBus.emit('playlist:reset', { id: currentId }); return; } } catch(e){}
+                    eventBus.emit('playlist:show', { id: currentId });
+                    eventBus.emit('playlist:reset', { id: currentId });
+                }
+            }
         });
     }
 
