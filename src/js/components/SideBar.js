@@ -1,4 +1,6 @@
 import LocalStorageManager from '../services/DB/LocalStorageManager.js';
+import { musicDB } from '../services/DB/MusicDatabase.js';
+import { eventBus } from '../lib/EventBus.js';
 
 // SideBar (versión simplificada)
 // Mantiene playlists en memoria y LocalStorage. NO usa IndexedDB ni blobs.
@@ -7,7 +9,7 @@ import LocalStorageManager from '../services/DB/LocalStorageManager.js';
 // TODO: Cargar playlists existentes al iniciar desde DB
 
 export class SideBar extends Fast {
-  constructor(props){
+  constructor(props) {
     super();
     this.name = 'SideBar';
     this.props = props;
@@ -17,7 +19,7 @@ export class SideBar extends Fast {
     this.built = () => {};
   }
 
-  #getTemplate(){
+  #getTemplate() {
     return `
       <div class="side-bar" id="sideBar">
         <div class="home-btn" id="homeBtn" title="Inicio"><i class="fa-solid fa-house"></i></div>
@@ -27,9 +29,9 @@ export class SideBar extends Fast {
     `;
   }
 
-  async #getCss(){ return await fast.getCssFile('SideBar'); }
+  async #getCss() { return await fast.getCssFile('SideBar'); }
 
-  async #render(){
+  async #render() {
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(await this.#getCss());
     this.shadowRoot.adoptedStyleSheets = [sheet];
@@ -42,20 +44,20 @@ export class SideBar extends Fast {
     this.$addPlaylistBtn = this.shadowRoot.querySelector('#addPlaylistBtn');
   }
 
-  async #checkAttributes(){
-    for(const attr of this.getAttributeNames()){
-      if(attr.startsWith('on')){ continue; }
+  async #checkAttributes() {
+    for(const attr of this.getAttributeNames()) {
+      if(attr.startsWith('on')) { continue; }
       this[attr] = this.getAttribute(attr);
       this.shadowRoot.firstElementChild?.setAttribute(attr, this[attr]);
     }
   }
 
-  async #checkProps(){
+  async #checkProps() {
     if(!this.props) return;
-    for(const k in this.props){
-      switch(k){
+    for(const k in this.props) {
+      switch(k) {
         case 'style':
-          for(const prop in this.props.style){ this.shadowRoot.firstElementChild.style[prop] = this.props.style[prop]; }
+          for(const prop in this.props.style) { this.shadowRoot.firstElementChild.style[prop] = this.props.style[prop]; }
           break;
         default:
           this.setAttribute(k, this.props[k]);
@@ -63,25 +65,51 @@ export class SideBar extends Fast {
     }
   }
 
-  async connectedCallback(){
+  async connectedCallback() {
     await this.#render();
     await this.#checkAttributes();
     await this.#checkProps();
     await this.ensureFontAwesome();
-    this._restoreState();
+
+    try {
+      await musicDB.init();
+      const savedPlaylists = await musicDB.getAllPlaylists();
+      this.playlists = savedPlaylists.map(pl => ({
+        id: pl.id,
+        name: pl.name,
+        filesCount: pl.trackCount
+      }));
+    } catch (error) {
+      console.error('Error loading playlists from DB', error);
+    }
+
     this._bindEvents();
     this.updatePlaylistList();
     this.built();
+
+    eventBus.on('playlist:updated', () => {
+      this._reloadPlaylistsFromDB();
+    });
+    // Carga inicial
+    this._reloadPlaylistsFromDB();
   }
 
-  _bindEvents(){
+  async _reloadPlaylistsFromDB() {
+    try {
+      const saved = await musicDB.getAllPlaylists();
+      this.playlists = saved.map(pl => ({ id: pl.id, name: pl.name, filesCount: pl.trackCount }));
+      this.updatePlaylistList();
+    } catch(e) { console.error(e); }
+  }
+
+  _bindEvents() {
     this.$homeBtn.addEventListener('click', ()=> this.showHome());
     this.$addPlaylistBtn.addEventListener('click', ()=> this.showAddPlaylist());
   }
 
-  addToBody(){ document.body.appendChild(this); }
+  addToBody() { document.body.appendChild(this) }
 
-  showAddPlaylist(){
+  showAddPlaylist() {
     // SweetAlert2 modal con drag & drop y selección múltiple
     let filesStorage = [];
     Swal.fire({
@@ -116,7 +144,7 @@ export class SideBar extends Fast {
         dropArea.addEventListener('click', ()=> fileInput.click());
         fileInput.addEventListener('change', ()=> handleFiles(fileInput.files));
 
-        function handleFiles(fileList){
+        function handleFiles(fileList) {
           const arr = Array.from(fileList);
           if(!arr.length) return;
           filesStorage = arr;
@@ -130,31 +158,35 @@ export class SideBar extends Fast {
       },
       preConfirm: () => {
         const playlistName = Swal.getPopup().querySelector('#playlistName').value.trim();
-        if(!playlistName){ Swal.showValidationMessage('El nombre es obligatorio'); return false; }
+        if(!playlistName) { Swal.showValidationMessage('El nombre es obligatorio'); return false; }
         return { name: playlistName, files: filesStorage };
       }
-    }).then(res => {
-      if(res.isConfirmed){
+    }).then(async (res) => {
+      if(res.isConfirmed) {
         const { name, files } = res.value;
-        this._createPlaylist(name, files);
-        Swal.fire('Playlist creada', `${name} (${files.length} archivos)`, 'success');
+
+        Swal.fire({ title: 'Guardando...', didOpen: () => Swal.showLoading() });
+
+        try {
+          const newPl = await musicDB.createPlaylistWithTracks(name, files);
+          this.playlists.push({
+            id: newPl.id,
+            name: newPl.name,
+            filesCount: newPl.trackCount
+          });
+          this.updatePlaylistList();
+
+          Swal.fire('Playlist creada', `${name} guardada correctamente con (${files.length} archivo${files.length > 1 ? 's' : ''})`, 'success');
+        } catch (error) {
+          Swal.fire('Error', 'No se pudo guardar la playlist', 'error');
+        }
       }
     });
   }
 
-  _createPlaylist(name, files){
-    const id = 'pl-' + crypto.randomUUID();
-    this.playlists.push({ id, name, filesCount: files.length });
-    this._selectedPlaylistId = id;
-    this._persistState();
-    this.updatePlaylistList();
-    // TODO: Persistir playlist y archivos en IndexedDB (media + playlists stores)
-    // TODO: Generar IDs de media y asociarlos trackIds cuando exista repositorio
-  }
-
-  updatePlaylistList(){
+  updatePlaylistList() {
     this.$playlistList.innerHTML = '';
-    for(const pl of this.playlists){
+    for(const pl of this.playlists) {
       const li = document.createElement('li');
       li.textContent = pl.name.split(' ').map(w=>w[0]).join('');
       li.dataset.id = pl.id;
@@ -170,25 +202,25 @@ export class SideBar extends Fast {
     }
   }
 
-  showHome(){
+  showHome() {
     this._selectedPlaylistId = null;
     this._persistState();
     this.updatePlaylistList();
     this.dispatchEvent(new CustomEvent('home:selected'));
   }
 
-  _persistState(){
+  _persistState() {
     LocalStorageManager.setItem('ui.playlists', this.playlists);
     LocalStorageManager.setItem('ui.currentPlaylistId', this._selectedPlaylistId);
   }
 
-  _restoreState(){
+  _restoreState() {
     const pls = LocalStorageManager.getItem('ui.playlists');
     if(Array.isArray(pls)) this.playlists = pls;
     this._selectedPlaylistId = LocalStorageManager.getItem('ui.currentPlaylistId') || null;
   }
 }
 
-if(!customElements.get('side-bar')){
+if(!customElements.get('side-bar')) {
   customElements.define('side-bar', SideBar);
 }

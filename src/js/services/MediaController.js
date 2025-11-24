@@ -67,7 +67,6 @@ export class MediaController {
       }
     }
     this.mediaEl.src = src;
-    // TODO: persist lastTrackSrc / descriptor.id via LocalStorageManager
     this.mediaEl.load();
   }
 

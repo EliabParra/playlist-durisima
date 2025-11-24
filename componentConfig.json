@@ -1,7 +1,7 @@
 {
-  "name": "PlayerBar",
+  "name": "Ejemplo",
   "pathComponent": "./src/js/components/",
   "pathHTML": "./examples/",
   "pathCss": "./src/css/",
-  "xTab": "player-bar"
+  "xTab": "ejemplo-x"
 }

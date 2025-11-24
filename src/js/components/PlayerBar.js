@@ -126,13 +126,13 @@ export class PlayerBar extends Fast {
         return new Promise(async (resolve, reject) => {
             try {
                 for(let attr of this.getAttributeNames()) {          
-                    if(attr.substring(0,2)!="on") {
+                    if (attr.substring(0,2)!="on") {
                         this[attr] = this.getAttribute(attr);
                         this.mainElement.setAttribute(attr, this[attr]);
                     }
                     else{
                         let f = this[attr];
-                        this[attr] = ()=>{ if(!this._disabled) f() };
+                        this[attr] = ()=>{ if (!this._disabled) f() };
                     }
                     switch(attr) {
                         case 'id' : 
@@ -150,7 +150,7 @@ export class PlayerBar extends Fast {
     #checkProps() {
         return new Promise(async (resolve, reject) => {
             try {
-                if(this.props) {
+                if (this.props) {
                     for(let attr in this.props) {
                         switch(attr) {
                             case 'style' :
@@ -159,12 +159,12 @@ export class PlayerBar extends Fast {
                             case 'events' : 
                                 for(let attrevent in this.props.events) {
                                     this.mainElement.addEventListener(attrevent, ()=>{
-                                        if(!this._disabled)this.props.events[attrevent]()})}
+                                        if (!this._disabled)this.props.events[attrevent]()})}
                                 break;
                             default : 
                                 this.setAttribute(attr, this.props[attr]);
                                 this[attr] = this.props[attr];
-                                if(attr==='id') {
+                                if (attr==='id') {
                                     this.id = this[attr];
                                     await fast.createInstance('PlayerBar', {'id': this[attr]})
                                 };
@@ -193,15 +193,15 @@ export class PlayerBar extends Fast {
 
     addToBody() {document.body.appendChild(this);}
 
-    #formatTime(sec){
-        if(!sec || isNaN(sec)) return '0:00';
+    #formatTime(sec) {
+        if (!sec || isNaN(sec)) return '0:00';
         sec = Math.floor(sec);
         let m = Math.floor(sec/60);
         let s = sec%60;
         return `${m}:${s.toString().padStart(2,'0')}`;
     }
 
-    setupListeners(){
+    setupListeners() {
         this.$playPause.addEventListener('click', ()=>this.togglePlay());
         this.$prev.addEventListener('click', ()=>this.prev());
         this.$next.addEventListener('click', ()=>this.next());
@@ -211,7 +211,7 @@ export class PlayerBar extends Fast {
 
         // progress click/seek
         this.$progressBar.addEventListener('click', (e)=>{
-            if(!this.media) return;
+            if (!this.media) return;
             const rect = this.$progressBar.getBoundingClientRect();
             const perc = (e.clientX - rect.left) / rect.width;
             this.media.currentTime = perc * this.media.duration;
@@ -220,7 +220,7 @@ export class PlayerBar extends Fast {
         // Drag seek
         let seeking = false;
         const onSeekMove = (e) => {
-            if(!seeking || !this.media) return;
+            if (!seeking || !this.media) return;
             const rect = this.$progressBar.getBoundingClientRect();
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const perc = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
@@ -246,18 +246,18 @@ export class PlayerBar extends Fast {
 
         // Keyboard accessibility
         this.shadowRoot.addEventListener('keydown', (e)=>{
-            if(e.code === 'Space'){ e.preventDefault(); this.togglePlay(); }
-            else if(e.code === 'ArrowRight'){ this.seek((this.media?.currentTime || 0) + 5); }
-            else if(e.code === 'ArrowLeft'){ this.seek((this.media?.currentTime || 0) - 5); }
-            else if(e.code === 'ArrowUp'){ const nv = Math.min(1, (this.media?.volume || 1) + 0.05); this.setVolume(nv); this.$volumeSlider.value = Math.round(nv*100); this._updateVolumeIcon(); }
-            else if(e.code === 'ArrowDown'){ const nv = Math.max(0, (this.media?.volume || 1) - 0.05); this.setVolume(nv); this.$volumeSlider.value = Math.round(nv*100); this._updateVolumeIcon(); }
-            else if(e.key === 'm'){ this.toggleMute(); this._updateVolumeIcon(); }
+            if (e.code === 'Space') { e.preventDefault(); this.togglePlay(); }
+            else if (e.code === 'ArrowRight') { this.seek((this.media?.currentTime || 0) + 5); }
+            else if (e.code === 'ArrowLeft') { this.seek((this.media?.currentTime || 0) - 5); }
+            else if (e.code === 'ArrowUp') { const nv = Math.min(1, (this.media?.volume || 1) + 0.05); this.setVolume(nv); this.$volumeSlider.value = Math.round(nv*100); this._updateVolumeIcon(); }
+            else if (e.code === 'ArrowDown') { const nv = Math.max(0, (this.media?.volume || 1) - 0.05); this.setVolume(nv); this.$volumeSlider.value = Math.round(nv*100); this._updateVolumeIcon(); }
+            else if (e.key === 'm') { this.toggleMute(); this._updateVolumeIcon(); }
         });
     }
 
-    setMedia(mediaElement){
-        if(!mediaElement) return;
-        if(this.media){
+    setMedia(mediaElement) {
+        if (!mediaElement) return;
+        if (this.media) {
             this.media.removeEventListener('timeupdate', this._timeUpdateHandler);
             this.media.removeEventListener('loadedmetadata', this._loadedHandler);
             this.media.removeEventListener('ended', this._endedHandler);
@@ -275,56 +275,54 @@ export class PlayerBar extends Fast {
     }
 
     // --- Public API ---
-    loadMedia(descriptor){
+    loadMedia(descriptor) {
         // descriptor: { id, src, type, title, artist, cover }
-        if(!descriptor || !descriptor.src) return;
+        if (!descriptor || !descriptor.src) return;
         this.mediaController.load(descriptor.src, { type: descriptor.type });
         this.setMedia(this.mediaController.mediaEl);
-        // TODO: persist lastTrackId (descriptor.id)
-        // TODO: update metadata UI (title, artist, cover)
         eventBus.emit('track:change', descriptor);
         this._updateMetadata(descriptor);
         this._ensureVideoVisibility(descriptor.type);
     }
 
-    play(){
-        if(!this.media) return;
+    play() {
+        if (!this.media) return;
         this.mediaController.play();
     }
 
-    pause(){
-        if(!this.media) return;
+    pause() {
+        if (!this.media) return;
         this.mediaController.pause();
     }
 
-    seek(seconds){
+    seek(seconds) {
         this.mediaController.seek(seconds);
     }
 
-    setVolume(v){
+    setVolume(v) {
         this.mediaController.setVolume(v);
         // TODO: persist volume level
     }
 
-    toggleMute(){
+    toggleMute() {
         this.mediaController.toggleMute();
         // TODO: persist mute state
     }
 
-    setQueue(list){
+    setQueue(list) {
         this._queue = Array.isArray(list) ? list : [];
         this._queueIndex = this._queue.length ? 0 : -1;
         // TODO: persist queue
         eventBus.emit('queue:change', { queue: this._queue });
     }
 
-    next(){
-        if(this._queueIndex < 0 || this._queueIndex >= this._queue.length - 1){
+    next() {
+        if (this._queueIndex < 0 || this._queueIndex >= this._queue.length - 1) {
             // emit end of queue
             eventBus.emit('queue:end');
             return;
         }
-        if(this._shuffle){
+        if (this._shuffle) {
             // pick random different index
             let idx;
             do { idx = Math.floor(Math.random()*this._queue.length); } while(idx === this._queueIndex && this._queue.length > 1);
@@ -336,8 +334,8 @@ export class PlayerBar extends Fast {
         this.loadMedia(descriptor);
     }
 
-    prev(){
-        if(this._queueIndex <= 0){
+    prev() {
+        if (this._queueIndex <= 0) {
             eventBus.emit('queue:start');
             return;
         }
@@ -346,45 +344,45 @@ export class PlayerBar extends Fast {
         this.loadMedia(descriptor);
     }
 
-    toggleShuffle(){
+    toggleShuffle() {
         this._shuffle = !this._shuffle;
         // TODO: persist shuffle state
         this._updatePlayState();
         eventBus.emit('shuffle:change', { shuffle: this._shuffle });
     }
 
-    toggleRepeat(){
+    toggleRepeat() {
         this._loop = !this._loop;
-        if(this.media) this.media.loop = this._loop;
+        if (this.media) this.media.loop = this._loop;
         // TODO: persist repeat state
         this._updatePlayState();
         eventBus.emit('repeat:change', { repeat: this._loop });
     }
 
-    destroy(){
+    destroy() {
         this.mediaController.destroy();
         // TODO: clear persisted position (optional)
     }
 
     // --- end Public API ---
 
-    _onLoaded(){
+    _onLoaded() {
         this.$timeTotal.textContent = this.#formatTime(this.media.duration);
     }
 
-    _onTimeUpdate(){
-        if(!this.media) return;
+    _onTimeUpdate() {
+        if (!this.media) return;
         this._reflectProgress(this.media.currentTime, this.media.duration || 0);
     }
 
-    _reflectProgress(cur, dur){
+    _reflectProgress(cur, dur) {
         const now = performance.now();
-        if(!this._lastProgressUpdate || now - this._lastProgressUpdate > 180){
+        if (!this._lastProgressUpdate || now - this._lastProgressUpdate > 180) {
             this._lastProgressUpdate = now;
             const perc = dur ? (cur/dur)*100 : 0;
             this.$progressFill.style.width = perc+'%';
             this.$timeCurrent.textContent = this.#formatTime(cur);
-            if(this.$progressHandle){
+            if (this.$progressHandle) {
                 this.$progressHandle.style.left = perc+'%';
                 this.$progressWrap?.setAttribute('aria-valuenow', String(Math.round(perc)));
             }
@@ -392,23 +390,23 @@ export class PlayerBar extends Fast {
         }
     }
 
-    _onEnded(){
+    _onEnded() {
         // if loop active, the media will loop itself if loop attribute set
         this._playing = false;
         this._updatePlayState();
         this.dispatchEvent(new CustomEvent('player-ended',{bubbles:true}));
     }
 
-    togglePlay(){
-        if(!this.media){
+    togglePlay() {
+        if (!this.media) {
             // try to resolve from props selector
-            if(this.props.mediaSelector) {
+            if (this.props.mediaSelector) {
                 const m = document.querySelector(this.props.mediaSelector);
-                if(m) this.setMedia(m);
+                if (m) this.setMedia(m);
             }
-            if(!this.media) return;
+            if (!this.media) return;
         }
-        if(this.media.paused){
+        if (this.media.paused) {
             this.media.play();
             this._playing = true;
         } else {
@@ -418,9 +416,9 @@ export class PlayerBar extends Fast {
         this._updatePlayState();
     }
 
-    _updatePlayState(){
+    _updatePlayState() {
         const icon = this.$playPause.querySelector('i');
-        if(this.media && !this.media.paused){
+        if (this.media && !this.media.paused) {
             icon.className = 'fa-solid fa-pause';
             this.$playPause.title = 'Pausa';
         } else {
@@ -428,13 +426,13 @@ export class PlayerBar extends Fast {
             this.$playPause.title = 'Reproducir';
         }
         // reflect loop
-        if(this.media) this.media.loop = this._loop;
+        if (this.media) this.media.loop = this._loop;
         this.$loop.classList.toggle('active', this._loop);
         this.$shuffle.classList.toggle('active', this._shuffle);
     }
 
     // Legacy methods maintained for backward compatibility (will emit via new API)
-    toggleLoop(){
+    toggleLoop() {
         this.toggleRepeat();
     }
 
@@ -442,20 +440,20 @@ export class PlayerBar extends Fast {
     // (method still exists for external code expecting previous name)
     // Actual implementation above
 
-    toggleFullscreen(){
+    toggleFullscreen() {
         // prefer media element (video) for fullscreen
         const target = this.media && this.media.requestFullscreen ? this.media : this.$wrapper;
-        if(!document.fullscreenElement){
+        if (!document.fullscreenElement) {
             target.requestFullscreen?.();
         } else {
             document.exitFullscreen?.();
         }
     }
 
-    _updateMetadata(descriptor){
+    _updateMetadata(descriptor) {
         this.$trackTitle.textContent = descriptor.title || 'Sin título';
         this.$trackArtist.textContent = descriptor.artist || 'Desconocido';
-        if(descriptor.cover){
+        if (descriptor.cover) {
             this.$coverImg.src = descriptor.cover;
         } else {
             this.$coverImg.src = '';
@@ -466,22 +464,22 @@ export class PlayerBar extends Fast {
         };
     }
 
-    _ensureVideoVisibility(type){
-        if(!this.media) return;
-        if(type === 'video'){ this.media.style.display = 'block'; }
+    _ensureVideoVisibility(type) {
+        if (!this.media) return;
+        if (type === 'video') { this.media.style.display = 'block'; }
         else { this.media.style.display = 'none'; }
         // TODO: lazy initialize visualization hook for video if needed
     }
 
-    _updateVolumeIcon(){
-        if(!this.media) return;
+    _updateVolumeIcon() {
+        if (!this.media) return;
         const v = this.media.volume;
-        if(this.media.muted || v === 0){ this.$volumeIcon.className = 'fa-solid fa-volume-xmark'; }
-        else if(v < 0.33){ this.$volumeIcon.className = 'fa-solid fa-volume-low'; }
+        if (this.media.muted || v === 0) { this.$volumeIcon.className = 'fa-solid fa-volume-xmark'; }
+        else if (v < 0.33) { this.$volumeIcon.className = 'fa-solid fa-volume-low'; }
         else { this.$volumeIcon.className = 'fa-solid fa-volume-high'; }
     }
 
-    attachVisualizer(callback){
+    attachVisualizer(callback) {
         // Store callback to invoke with future waveform/analyser data
         this._visualizerCallback = callback;
         // TODO: integrate WebAudio analyser and emit waveformData periodically

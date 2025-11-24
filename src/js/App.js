@@ -3,63 +3,174 @@ import './lib/Fast.js';
 import './components/SideBar.js';
 import './components/SearchBar.js';
 import './components/PlayerBar.js';
+import LocalStorageManager from './services/DB/LocalStorageManager.js';
+import { musicDB } from './services/DB/MusicDatabase.js';
 import { eventBus } from './lib/EventBus.js';
 
 // MainContent placeholder (pantallas dinámicas futuras)
 class MainContent extends Fast {
-	constructor(){
+	constructor() {
 		super();
 		this.name = 'MainContent';
 		this.attachShadow({ mode:'open' });
 		this.currentView = 'home';
 	}
-	#template(){
-		return `<div class="main-content" id="mainContent"></div>`;
+	#template() {
+		return `
+            <style>
+                :host { display: block; width: 100%; height: 100%; overflow: hidden; }
+                .layout { display: flex; height: 100%; }
+                
+                /* Zona del Video: Fija, nunca se borra con innerHTML */
+                #video-stage {
+                    width: 70%;
+                    background: #000;
+                    flex-shrink: 0; /* Que no se aplaste */
+                    display: none; /* Oculto por defecto */
+                    justify-content: flex-end;
+                    align-items: center;
+                    min-height: 300px; /* Altura mínima para el video */
+                }
+                #video-stage.active { display: flex; }
+
+                /* Zona del Contenido (Listas): Dinámica, aquí hacemos innerHTML */
+                #mainContent {
+                    flex-grow: 1;
+                    overflow-y: auto; /* Scroll solo en la lista */
+                    padding-bottom: 80px; /* Espacio para el player bar */
+                }
+            </style>
+
+            <div class="layout">
+                <div id="mainContent" class="main-content fade-in"></div>
+                <div id="video-stage"></div>
+            </div>
+        `;
 	}
-	async connectedCallback(){
+	async connectedCallback() {
+        this.ensureFontAwesome();
 		const tpl = document.createElement('template');
 		tpl.innerHTML = this.#template();
 		this.shadowRoot.appendChild(tpl.content.cloneNode(true));
-		this.$root = this.shadowRoot.querySelector('#mainContent');
-		this.renderHome();
+		
+        // Referencias a las dos zonas
+        this.$videoContainer = this.shadowRoot.querySelector('#video-stage');
+		this.$contentRoot = this.shadowRoot.querySelector('#mainContent');
+		
+        this.renderHome();
 	}
-	renderHome(){
+	renderHome() {
 		this.currentView = 'home';
-		this.$root.innerHTML = `
-			<div class="view-home fade-in">
-				<h2>Inicio</h2>
-				<p>Selecciona una playlist a la izquierda o usa la búsqueda para filtrar contenidos.</p>
-				<p class="hint">(Esta área cambiará con componentes de pantallas futuras).</p>
-			</div>`;
+		this.$contentRoot.innerHTML = `
+            <div class="view-home fade-in" style="padding:20px;">
+                <h2>Inicio</h2>
+                <p>Bienvenido a tu reproductor local.</p>
+            </div>
+        `;
+        
 	}
-	renderPlaylist(playlistId){
+	async renderPlaylist(playlistId) {
 		this.currentView = 'playlist';
-		this.$root.innerHTML = `
-			<div class="view-playlist fade-in">
-				<h2>Playlist</h2>
-				<p>ID seleccionada: <strong>${playlistId}</strong></p>
-				<p>TODO: cargar metadata y tracks desde IndexedDB.</p>
-			</div>`;
-		// TODO: fetch playlist metadata & tracks from IndexedDB (store: playlists, media)
+        
+        try {
+            const tracks = await musicDB.getTracksByPlaylist(playlistId);
+            const title = await musicDB.getPlaylistName(playlistId);
+            
+            // Generar HTML con botón de borrar
+            const listHtml = tracks.map((t, index) => `
+                <div class="track-row" data-index="${index}" style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid #444; cursor:pointer;">
+                    <div class="track-info" style="flex-grow:1">
+                        <strong>${index+1}.</strong> ${t.title} 
+                        <span style="font-size:0.8em; color:#aaa; margin-left:10px;">${t.type.toUpperCase()}</span>
+                    </div>
+                    <button class="delete-track-btn" data-id="${t.id}" style="background:transparent; border:none; color:#ff5555; cursor:pointer; padding:5px; font-size:18px;">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            `).join('');
+
+            this.$contentRoot.innerHTML = `
+                <div class="view-playlist fade-in" style="padding:20px;">
+                    <h1 style="margin-bottom:12px; font-size:48px;">${title}</h1>
+                    <div class="track-list">${tracks.length ? listHtml : '<p>No hay canciones. ¡Agrega algunas!</p>'}</div>
+                </div>
+            `;
+
+            // Evento: REPRODUCIR (Click en la fila)
+            this.$contentRoot.querySelectorAll('.track-row').forEach(row => {
+                row.addEventListener('click', (e) => {
+                    // Evitar que se reproduzca si dimos click al botón borrar
+                    if(e.target.closest('.delete-track-btn')) return;
+                    
+                    const idx = parseInt(row.dataset.index);
+                    // Emitimos evento para setupEvents
+                    eventBus.emit('playlist:play', { queue: tracks, startIndex: idx });
+                });
+            });
+
+            // Evento: BORRAR CANCIÓN (Click en basura)
+            this.$contentRoot.querySelectorAll('.delete-track-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation(); // Detener propagación
+                    Swal.fire({
+                        title: '¿Eliminar este archivo permanentemente?',
+                        text: 'Esta acción no se puede deshacer.',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Sí, borrar',
+                        confirmButtonColor: '#d33'
+                    }).then(async (r) => {
+                        if (r.isConfirmed) {
+                            await musicDB.deleteTrack(parseInt(btn.dataset.id));
+                            // Recargar vista actual
+                            this.renderPlaylist(playlistId);
+                            eventBus.emit('playlist:updated'); // Actualizar contador sidebar
+                            Swal.fire('Archivo eliminado', '', 'success');
+                        }
+                    })
+                });
+            });
+
+        } catch (e) {
+            this.$contentRoot.innerHTML = `<p>Error: ${e.message}</p>`;
+        }
 	}
-	renderSearchResults(query){
+	async renderSearchResults(query) {
 		this.currentView = 'search';
-		this.$root.innerHTML = `
-			<div class="view-search fade-in">
-				<h2>Resultados de búsqueda</h2>
-				<p>Query: <strong>${query}</strong></p>
-				<p>TODO: ejecutar búsqueda en la playlist actual o global usando IndexedDB.</p>
-			</div>`;
-		// TODO: perform search against indexed store (tracks, metadata)
+        this.$contentRoot.innerHTML = `<div class="loading">Buscando "${query}"...</div>`;
+        try {
+            const results = await musicDB.searchTracks(query);
+            
+            const listHtml = results.map((t, index) => `
+                <div class="track-row" data-index="${index}" style="padding:10px; border-bottom:1px solid #444; cursor:pointer;">
+                    <i class="fa-solid ${t.type === 'video' ? 'fa-video' : 'fa-music'}"></i> 
+                    ${t.title}
+                </div>
+            `).join('');
+
+            this.$contentRoot.innerHTML = `
+                <div class="view-search fade-in" style="padding:20px;">
+                    <h2>Resultados para: "${query}"</h2>
+                    <div class="track-list">${results.length ? listHtml : '<p>No se encontraron coincidencias.</p>'}</div>
+                </div>`;
+
+            // Al hacer click en resultado, reproducimos solo esa lista de resultados
+            this.$contentRoot.querySelectorAll('.track-row').forEach(row => {
+                row.addEventListener('click', () => {
+                    eventBus.emit('playlist:play', { queue: results, startIndex: parseInt(row.dataset.index) });
+                });
+            });
+
+        } catch(e) { console.error(e); }
 	}
 }
 
-if(!customElements.get('main-content')){
+if (!customElements.get('main-content')) {
 	customElements.define('main-content', MainContent);
 }
 
 class App {
-	constructor(){
+	constructor() {
 		this.$sidebarContainer = document.getElementById('sidebar-container');
 		this.$searchbarContainer = document.getElementById('searchbar-container');
 		this.$contentContainer = document.getElementById('content-container');
@@ -73,80 +184,106 @@ class App {
 		this.mainContent = null;
 	}
 
-	init(){
+	init() {
 		this.mountComponents();
 		this.setupEvents();
-		// Future: restore persisted state (queue, last track, volume, playlist selection)
-		// TODO: cargar estado inicial de IndexedDB (playlists, último track, volumen, posición)
 	}
 
-	mountComponents(){
+	mountComponents() {
 		// Crear instancias custom elements
 		this.sideBar = document.createElement('side-bar');
 		this.searchBar = document.createElement('search-bar');
 		this.playerBar = document.createElement('player-bar');
 		this.mainContent = document.createElement('main-content');
+        this.searchBar.renderPlaylist = this.mainContent.renderPlaylist.bind(this.mainContent);
 
 		// Montar en contenedores
 		this.$sidebarContainer.appendChild(this.sideBar);
 		this.$searchbarContainer.appendChild(this.searchBar);
 		this.$playerbarContainer.appendChild(this.playerBar);
 		this.$contentContainer.appendChild(this.mainContent);
-		// Crear stage para video playback dentro de main content (fuera de player bar)
-		this.$videoStage = document.createElement('div');
-		this.$videoStage.id = 'video-stage';
-		this.$videoStage.className = 'video-stage hidden';
-		this.mainContent.shadowRoot.querySelector('#mainContent').prepend(this.$videoStage);
 	}
 
-	setupEvents(){
-		// Playlist seleccionada
-		this.sideBar.addEventListener('playlist:selected', (e)=>{
-			const { id } = e.detail;
-			this.mainContent.renderPlaylist(id);
-			// TODO: cargar queue de la playlist seleccionada y pasarla al reproductor
-			// eventBus.emit('playlist:load', { id });
-		});
-		// Volver a home
-		this.sideBar.addEventListener('home:selected', ()=>{
-			this.mainContent.renderHome();
-		});
-		// Búsqueda
-		this.searchBar.addEventListener('search:query', (e)=>{
-			const { query } = e.detail;
-			this.mainContent.renderSearchResults(query);
-			// TODO: filtrar resultados reales
-		});
-		// Escuchar cambio de track para reflejar metadata (si se quisiera mostrar en main)
-		eventBus.on('track:change', (descriptor)=>{
-			// Placeholder: podríamos actualizar vista si está mostrando detalles
-			// TODO: opcional - sincronizar vista de pista en MainContent
-		});
-		// Cuando media se carga determinar si es video y mover elemento
-		eventBus.on('media:loaded', ({ type })=>{
-			const el = this.playerBar.mediaController.mediaEl;
-			if(!el) return;
-			if(type === 'video'){
-				// Mover video al stage central
-				this.$videoStage.classList.remove('hidden');
-				this.$videoStage.innerHTML = '';
-				this.$videoStage.appendChild(el);
-				el.style.display = 'block';
-				el.setAttribute('playsinline','');
-				// Ajustar clase para estilos
-				el.classList.add('video-element');
-			} else {
-				// Revertir a audio: ocultar stage y devolver elemento al player wrapper
-				this.$videoStage.classList.add('hidden');
-				this.playerBar.shadowRoot.querySelector('#playerWrapper').appendChild(el);
-				el.style.display = 'none';
-			}
-		});
+	setupEvents() {
+		// Sidebar y Search (Ya tenías esto)
+        this.sideBar.addEventListener('playlist:selected', (e) => {
+            const { id } = e.detail;
+            this.mainContent.renderPlaylist(id);
+            // GUARDAR ID PARA LA SEARCHBAR
+            LocalStorageManager.setItem('ui.currentPlaylistId', id);
+        });
+        
+        this.sideBar.addEventListener('home:selected', () => {
+            this.mainContent.renderHome();
+            LocalStorageManager.removeItem('ui.currentPlaylistId');
+        });
+
+        this.searchBar.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') {
+                const query = this.searchBar.shadowRoot.querySelector('#searchInput').value;
+                if (query) {
+                    this.mainContent.renderSearchResults(query);
+                }
+            }
+        });
+
+        // --- LÓGICA DE REPRODUCCIÓN (DB -> Player) ---
+        eventBus.on('playlist:play', ({ queue, startIndex }) => {
+            this.playerBar.setQueue(queue);
+            const track = queue[startIndex];
+            if(track) {
+                this.playerBar.loadMedia(track);
+                this.playerBar._queueIndex = startIndex; 
+                this.playerBar.play();
+            }
+        });
+
+        // --- ARREGLO DEL VIDEO QUE NO SE VE ---
+        eventBus.on('media:loaded', ({ type }) => {
+            const el = this.playerBar.mediaController.mediaEl;
+            if(!el) return;
+
+            // Buscamos el contenedor FIJO dentro del shadowDOM de MainContent
+            const videoContainer = this.mainContent.shadowRoot.querySelector('#video-stage');
+            const playerWrapper = this.playerBar.shadowRoot.querySelector('#playerWrapper');
+
+            if(type === 'video') {
+                if(videoContainer){
+                    // 1. Mostrar el contenedor
+                    videoContainer.classList.add('active');
+                    
+                    // 2. Mover el elemento (AppendChild mueve, no copia)
+                    videoContainer.innerHTML = ''; 
+                    videoContainer.appendChild(el);
+                    
+                    // 3. Estilos para que se vea bien
+                    el.style.width = '100%';
+                    el.style.height = '100%';
+                    el.style.maxHeight = '60vh'; 
+                    el.style.display = 'block';
+
+                    // 4. Intentar reproducir de nuevo (por si el movimiento lo pausó)
+                    setTimeout(() => {
+                        el.play().catch(e => console.log("Reproducción retomada tras mover al DOM"));
+                    }, 50);
+                }
+            } else {
+                // Es Audio
+                if(videoContainer) {
+                    videoContainer.classList.remove('active');
+                    videoContainer.innerHTML = ''; // Limpiar stage
+                }
+                
+                // Devolver audio al player bar
+                if(playerWrapper) playerWrapper.appendChild(el);
+                el.style.display = 'none';
+            }
+        });
 	}
 }
 
 // Inicializar aplicación
-window.addEventListener('DOMContentLoaded', ()=>{
+window.addEventListener('DOMContentLoaded', () => {
 	const app = new App();
 	app.init();
 	window._app = app; // debug convenience

@@ -1,8 +1,11 @@
 import { Fast } from '../lib/Fast.js';
 import * as C from '../constants.js';
+import { musicDB } from '../services/DB/MusicDatabase.js';
+import LocalStorageManager from '../services/DB/LocalStorageManager.js';
+import { eventBus } from '../lib/EventBus.js';
 
 export class SearchBar extends Fast {
-    constructor(props) {
+    constructor(props, renderPlaylist = () => {}) {
         super();
         this.name = "SearchBar";
         this.props = props;
@@ -59,13 +62,13 @@ export class SearchBar extends Fast {
         return new Promise(async (resolve, reject) => {
             try {
                 for(let attr of this.getAttributeNames()) {
-                    if(attr.substring(0,2)!="on") {
+                    if (attr.substring(0,2)!="on") {
                         this[attr] = this.getAttribute(attr);
                         this.mainElement.setAttribute(attr, this[attr]);
                     }
                     else{
                         let f = this[attr];
-                        this[attr] = ()=>{ if(!this._disabled) f() };
+                        this[attr] = ()=>{ if (!this._disabled) f() };
                     }
                     switch(attr) {
                         case 'id' : 
@@ -83,7 +86,7 @@ export class SearchBar extends Fast {
     #checkProps() {
         return new Promise(async (resolve, reject) => {
             try {
-                if(this.props) {
+                if (this.props) {
                     for(let attr in this.props) {
                         switch(attr) {
                             case 'style' :
@@ -92,12 +95,12 @@ export class SearchBar extends Fast {
                             case 'events' : 
                                 for(let attrevent in this.props.events) {
                                     this.mainElement.addEventListener(attrevent, ()=>{
-                                        if(!this._disabled)this.props.events[attrevent]()})}
+                                        if (!this._disabled)this.props.events[attrevent]()})}
                                 break;
                             default : 
                                 this.setAttribute(attr, this.props[attr]);
                                 this[attr] = this.props[attr];
-                                if(attr==='id') {
+                                if (attr==='id') {
                                     this.id = this[attr];
                                     await fast.createInstance('SearchBar', {'id': this[attr]})
                                 };
@@ -124,23 +127,43 @@ export class SearchBar extends Fast {
     addToBody() { document.body.appendChild(this) }
 
     setupEventListeners() {
-        this.$settings.addEventListener('click', () => { this.showSettings() })
-        this.$addFiles.addEventListener('click', () => { this.showAddFiles() })
+        this.$settings.addEventListener('click', () => this.showSettings());
+        this.$addFiles.addEventListener('click', () => this.showAddFiles());
+        
+        // Búsqueda al presionar Enter
         this.$searchInput.addEventListener('keyup', (e) => {
             if (e.key === 'Enter') {
-                this.search(this.$searchInput.value)
+                const query = this.$searchInput.value.trim();
+                if (query) {
+                    // Emitimos evento para que App.js maneje la vista
+                    eventBus.emit('search:query', { query });
+                }
             }
-        })
+        });
+        
+        // Opcional: Búsqueda al hacer click en la lupa
+        this.$searchInput.nextElementSibling?.addEventListener('click', () => {
+            const query = this.$searchInput.value.trim();
+            if (query) eventBus.emit('search:query', { query });
+        });
     }
 
     search(query) {
-        // TODO: buscar archivos en la playlist (futura IndexedDB / cache)
         this.dispatchEvent(new CustomEvent('search:query', { detail:{ query } }));
     }
 
     showAddFiles() {
-        let filesStorage = [];
+        const currentId = LocalStorageManager.getItem('ui.currentPlaylistId');
+        if (!currentId) {
+            return Swal.fire({
+                icon: 'warning',
+                title: 'Atención',
+                text: 'Primero selecciona una playlist del menú lateral para añadir canciones.',
+                timer: 3000
+            });
+        }
 
+        let filesStorage = [];
         Swal.fire({
             title: 'Subir Archivos',
             theme: 'dark',
@@ -200,40 +223,54 @@ export class SearchBar extends Fast {
                     Swal.showValidationMessage('Selecciona al menos un archivo');
                     return false;
                 }
-                // Retornamos los archivos para procesarlos en el .then()
-                // Opcional: Podrías llamar a guardarEnIndexedDB aquí y usar showLoading()
                 return filesStorage;
             }
-        }).then((result) => {
+        }).then(async (result) => { // <--- AÑADIR ASYNC AQUÍ
             if (result.isConfirmed) {
-                const archivosAProcesar = result.value;
+                const archivosNuevos = result.value;
 
-                // Mostramos un loading mientras IndexedDB trabaja (es rápido, pero buena práctica)
+                // 1. Obtener ID de la playlist actual desde LocalStorage
+                const currentId = LocalStorageManager.getItem('ui.currentPlaylistId');
+
+                if (!currentId) {
+                    return Swal.fire('Error', 'Debes seleccionar una playlist primero.', 'warning');
+                }
+
+                // 2. Mostrar Loading
                 Swal.fire({
-                    title: 'Guardando en la playlist...',
-                    theme: 'dark',
+                    title: 'Guardando archivos...',
+                    text: 'Esto puede tardar un poco si son videos grandes.',
                     allowOutsideClick: false,
-                    didOpen: () => {
-                        Swal.showLoading();
-                        
-                        // TODO: guardar en indexedDB
-                            // .then((cantidad) => {
-                            //     Swal.fire(
-                            //         '¡Guardado!',
-                            //         `Se han almacenado ${cantidad} archivos en IndexedDB localmente.`,
-                            //         'success'
-                            //     );
-                            // })
-                            // .catch((error) => {
-                            //     Swal.fire('Error', error, 'error');
-                            // });
-                    }
+                    didOpen: () => Swal.showLoading()
                 });
+
+                try {
+                    // 3. Guardar en IndexedDB usando nuestra función nueva
+                    await musicDB.addTracksToPlaylist(currentId, archivosNuevos);
+                    this.renderPlaylist(currentId);
+                    eventBus.emit('playlist:updated');
+                    eventBus.emit('playlist:selected', { id: currentId }); // Para refrescar tabla central
+                    Swal.fire({
+                        icon: 'success',
+                        title: '¡Guardado!',
+                        text: `Se añadieron ${archivosNuevos.length} archivos.`,
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
+                } catch (error) {
+                    console.error(error);
+                    Swal.fire('Error', 'No se pudieron guardar los archivos.', 'error');
+                }
             }
         });
     }
 
     showSettings() {
+        const currentId = LocalStorageManager.getItem('ui.currentPlaylistId');
+        if (!currentId) {
+            return Swal.fire('Error', 'No hay ninguna playlist seleccionada para editar.', 'error');
+        }
+
         Swal.fire({
             title: 'Configuración',
             theme: 'dark',
@@ -245,42 +282,33 @@ export class SearchBar extends Fast {
             `,
             showCloseButton: false,
             showDenyButton: true,
-            confirmButtonText: "Guardar",
+            confirmButtonText: "Renombrar",
             denyButtonText: `Eliminar`,
-        }).then((result) => {
+        }).then(async (result) => {
             if (result.isConfirmed) {
-                // TODO: guardar el nombre de la playlist
-                Swal.fire({
-                    title: '¡Guardado!',
-                    theme: 'dark',
-                    icon: 'success',
-                    showCancelButton: false,
-                    showCloseButton: false,
-                    showConfirmButton: false,
-                    timer: 1000
-                })
+                const name = document.querySelector('#playlistName').value;
+                if (name) {
+                    await musicDB.updatePlaylistName(currentId, name);
+                    eventBus.emit('playlist:updated'); // Refrescar Sidebar
+                    // Refrescar título en MainContent (opcional, o recargar playlist)
+                    eventBus.emit('playlist:selected', { id: currentId }); 
+                    Swal.fire('Nombre actualizado', '', 'success');
+                }
             } else if (result.isDenied) {
-                // TODO: eliminar la playlist
                 Swal.fire({
-                    title: "¿Estás seguro?",
-                    theme: "dark",
-                    text: "No podrás revertir esto!",
-                    icon: "warning",
+                    title: '¿Estás seguro?',
+                    text: "Se borrarán todos los archivos.",
+                    icon: 'warning',
                     showCancelButton: true,
-                    showCloseButton: false,
-                    confirmButtonText: "Sí, eliminar!",
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        Swal.fire({
-                            title: "¡Eliminado!",
-                            theme: 'dark',
-                            text: "Tu playlist ha sido eliminada.",
-                            icon: "success",
-                            showCancelButton: false,
-                            showCloseButton: false,
-                            showConfirmButton: false,
-                            timer: 1000
-                        });
+                    confirmButtonText: 'Sí, borrar',
+                    confirmButtonColor: '#d33'
+                }).then(async (r) => {
+                    if (r.isConfirmed) {
+                        await musicDB.deletePlaylist(currentId);
+                        LocalStorageManager.removeItem('ui.currentPlaylistId');
+                        eventBus.emit('playlist:updated'); // Refrescar Sidebar
+                        eventBus.emit('home:selected'); // Ir a Home
+                        Swal.fire('Eliminada', '', 'success');
                     }
                 });
             }
