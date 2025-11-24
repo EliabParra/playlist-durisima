@@ -1,0 +1,7 @@
+{
+  "name": "Ejemplo",
+  "pathComponent": "./src/js/components/",
+  "pathHTML": "./examples/",
+  "pathCss": "./src/css/",
+  "xTab": "ejemplo-x"
+}

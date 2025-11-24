@@ -1,0 +1,187 @@
+/* ===== SweetAlert2 Theming (Dark Spotify Style) ===== */
+:root {
+    --swal-bg: #121212;
+    --swal-surface: #181818;
+    --swal-border: rgba(255,255,255,0.06);
+    --swal-radius: 20px;
+    --swal-green: #1DB954;
+    --swal-green-hover: #19a34b;
+    --swal-red: #d33;
+    --swal-red-hover: #b32525;
+    --swal-text-primary: #fafafa;
+    --swal-text-secondary: #b3b3b3;
+    --swal-shadow: 0 10px 32px -8px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+.swal2-container {
+    backdrop-filter: blur(6px) saturate(140%);
+    background: rgba(0,0,0,0.55);
+    font-family: var(--font-sans);
+}
+
+.swal2-popup {
+    background: linear-gradient(160deg, var(--swal-bg) 0%, var(--swal-surface) 100%);
+    border: 1px solid var(--swal-border);
+    border-radius: var(--swal-radius);
+    box-shadow: var(--swal-shadow);
+    padding: 26px 30px 28px;
+    animation: swalFadeIn 360ms cubic-bezier(.16,.84,.44,1);
+    font-family: var(--font-sans);
+}
+
+@keyframes swalFadeIn {
+    from { opacity:0; transform: translateY(14px) scale(.98); }
+    to { opacity:1; transform: translateY(0) scale(1); }
+}
+
+.swal2-title {
+    color: var(--swal-text-primary);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: .5px;
+    text-shadow: 0 1px 2px rgba(0,0,0,.4);
+    margin-bottom: 12px;
+    font-family: var(--font-sans);
+}
+
+.swal2-html-container {
+    color: var(--swal-text-secondary);
+    font-size: 14px;
+    line-height: 1.5;
+    letter-spacing: .3px;
+    font-family: var(--font-sans);
+}
+
+.swal2-actions {
+    margin-top: 24px;
+    gap: 12px;
+}
+
+.swal2-confirm, .swal2-deny, .swal2-cancel {
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 22px;
+    border-radius: 999px;
+    letter-spacing: .4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: background 180ms ease, transform 180ms ease, box-shadow 180ms ease, filter 160ms ease;
+    box-shadow: 0 4px 12px -3px rgba(0,0,0,.6);
+    font-family: var(--font-sans);
+}
+
+.swal2-confirm {
+    background: linear-gradient(145deg, var(--swal-green) 0%, var(--swal-green-hover) 100%);
+    color: #fff;
+}
+.swal2-confirm:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.swal2-confirm:active { transform: translateY(0); filter: brightness(.92); }
+
+.swal2-deny {
+    background: linear-gradient(145deg, var(--swal-red) 0%, var(--swal-red-hover) 100%);
+    color: #fff;
+}
+.swal2-deny:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.swal2-deny:active { transform: translateY(0); filter: brightness(.9); }
+
+.swal2-cancel {
+    background: #262626;
+    color: var(--swal-text-secondary);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08), 0 4px 12px -3px rgba(0,0,0,.6);
+}
+.swal2-cancel:hover { color: #fff; background: #2e2e2e; }
+.swal2-cancel:active { background:#242424; }
+
+.swal2-icon { box-shadow: none; }
+.swal2-icon.swal2-success { border-color: var(--swal-green); }
+.swal2-icon.swal2-success [class^="swal2-success-line"] { background-color: var(--swal-green); }
+.swal2-icon.swal2-success .swal2-success-ring { border: .25em solid rgba(29,185,84,.3); }
+.swal2-icon.swal2-error { border-color: var(--swal-red); }
+.swal2-icon.swal2-error [class^="swal2-x-mark-line"] { background-color: var(--swal-red); }
+
+.swal2-timer-progress-bar { background: var(--swal-green); height: 4px; }
+
+/* Input fields inside Swal */
+.swal2-popup input[type="text"],
+.swal2-popup input[type="number"],
+.swal2-popup input[type="email"],
+.swal2-popup input[type="password"],
+.swal2-popup textarea,
+.swal2-popup select {
+    background: #202020;
+    border: 1px solid #2a2a2a;
+    color: #fff;
+    border-radius: 10px;
+    font-size: 18px;
+    padding: 10px 14px;
+    outline: none;
+    transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+    font-family: var(--font-sans);
+}
+.swal2-popup input:focus, .swal2-popup textarea:focus, .swal2-popup select:focus {
+    border-color: var(--swal-green);
+    background: #242424;
+    box-shadow: 0 0 0 2px rgba(29,185,84,.35);
+}
+
+/* Drop zone (reintegrated & enhanced) */
+.custom-drop-zone {
+    border: 2px dashed rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 26px 22px;
+    margin-top: 28px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 200ms ease, background 200ms ease, transform 260ms ease;
+    background: #181818;
+    color: var(--swal-text-secondary);
+    position: relative;
+    overflow: hidden;
+}
+.custom-drop-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 30% 25%, rgba(255,255,255,.08), transparent 70%);
+    opacity: 0;
+    transition: opacity 320ms ease;
+    pointer-events: none;
+}
+.custom-drop-zone.highlight,
+.custom-drop-zone:hover {
+    border-color: var(--swal-green);
+    background: #1f1f1f;
+}
+.custom-drop-zone.highlight::before,
+.custom-drop-zone:hover::before { opacity: 1; }
+.custom-drop-zone.highlight { transform: scale(1.015); }
+
+.drop-text { font-size: 13px; margin: 12px 0 4px; pointer-events:none; color: var(--swal-text-secondary); }
+.drop-icon { font-size: 30px; margin-bottom: 10px; color: var(--swal-green); pointer-events:none; }
+.file-item { margin-top: 10px; font-weight: 500; font-size: 14px; color: var(--swal-green); display:flex; justify-content:space-between; background:#202020; padding:8px 12px; border-radius:8px; }
+
+/* Scrollbar inside any tall content */
+.swal2-popup ::-webkit-scrollbar { width: 10px; }
+.swal2-popup ::-webkit-scrollbar-track { background: #141414; }
+.swal2-popup ::-webkit-scrollbar-thumb { background: #2b2b2b; border-radius: 20px; }
+.swal2-popup ::-webkit-scrollbar-thumb:hover { background: #343434; }
+
+/* Accessibility focus outline fallback */
+.swal2-confirm:focus-visible,
+.swal2-deny:focus-visible,
+.swal2-cancel:focus-visible {
+    outline: 2px solid rgba(255,255,255,.6);
+    outline-offset: 2px;
+}
+
+.playlist-name-container { display: flex; align-items: center; gap: 12px; }
+.playlist-name-label { font-size: 18px; }
+
+@media (max-width: 520px) {
+    .swal2-popup { padding: 22px 20px 24px; }
+    .swal2-title { font-size: 20px; }
+    .swal2-actions { flex-wrap: wrap; }
+}

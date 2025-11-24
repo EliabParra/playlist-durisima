@@ -1,0 +1,39 @@
+
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>SearchBar - Demo</title>
+        <!-- Fuente Outfit -->
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+        <!-- CSS Global para tipografía y utilidades -->
+        <link rel="stylesheet" href="../src/css/global.css">
+        <!-- SweetAlert estilos -->
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+        <link rel="stylesheet" href="../src/css/Swal.css">
+        <script type="module" src="../src/js/lib/Fast.js"></script>
+    </head>
+    <body>
+        <script src="https://kit.fontawesome.com/8dd654076b.js" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+        <script type="module">
+            import { SearchBar } from '../src/js/components/SearchBar.js';
+            
+            let fastInit = async () => {
+                let comp = await fast.createInstance("SearchBar", {
+                    'id':'MySearchBarJS',
+                });
+                comp.built = ()=>{
+                    console.log('Componente construido...');
+                }
+                comp.addToBody();
+            };
+            window.addEventListener('DOMContentLoaded', fastInit);
+        </script>
+        <search-bar id="MySearchBarHTML"></search-bar>
+        <br><br><br><br><br><br>
+    </body>
+</html> 
