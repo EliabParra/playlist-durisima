@@ -11,8 +11,18 @@ export class PlayerBar extends Fast {
         this.built = () => {}; 
         this.attachShadow({mode:'open'});
         this._isBuilt = false;
-        this._loop = false;
+        // loopMode: 'none' | 'all' | 'one'
+        this._loopMode = 'none';
         this._shuffle = false;
+        // restore persisted loopMode and shuffle if present
+        try {
+            const savedLoop = localStorage.getItem('player_loopMode');
+            if (savedLoop === 'none' || savedLoop === 'all' || savedLoop === 'one') this._loopMode = savedLoop;
+        } catch(e) { /* ignore storage errors */ }
+        try {
+            const savedShuffle = localStorage.getItem('player_shuffle');
+            if (savedShuffle !== null) this._shuffle = (savedShuffle === 'true');
+        } catch(e) { /* ignore storage errors */ }
         this._playing = false;
         this.media = null; // HTMLMediaElement to control
         this._queue = []; // internal queue placeholder
@@ -28,55 +38,7 @@ export class PlayerBar extends Fast {
             this._reflectProgress(currentTime, duration);
             // TODO: persist currentTime periodically for resume feature
         });
-        eventBus.on('volume:change', ({ volume, muted })=> {
-            try {
-                if (this.$volumeSlider) this.$volumeSlider.value = Math.round((volume ?? 1) * 100);
-            } catch(e){}
-            try { this._updateVolumeIcon(); } catch(e){}
-        });
-
-        // Stop/reset if the currently playing track is deleted elsewhere
-        eventBus.on('track:deleted', ({ id }) => {
-            try {
-                const current = this._queue[this._queueIndex];
-                if (current && Number(current.id) === Number(id)) {
-                    // use public reset if available
-                    try { this.reset(); return; } catch(e){}
-                    // fallback: manual reset
-                    try { this.pause(); } catch(e){}
-                    try { this.setQueue([]); } catch(e){}
-                    this._queueIndex = -1;
-                    try { this._updateMetadata({ title: 'Sin título', artist: 'Desconocido' }); } catch(e){}
-                    try { if (this.$timeCurrent) this.$timeCurrent.textContent = '0:00'; } catch(e){}
-                    try { if (this.$timeTotal) this.$timeTotal.textContent = '0:00'; } catch(e){}
-                    try { if (this.$progressFill) this.$progressFill.style.width = '0%'; } catch(e){}
-                    try { if (this.$progressHandle) this.$progressHandle.style.left = '0%'; } catch(e){}
-                    // clear any video stage if present
-                    try {
-                        const main = document.querySelector('main-content');
-                        const videoStage = main?.shadowRoot?.querySelector('#video-stage');
-                        if (videoStage) { videoStage.classList.remove('active'); videoStage.innerHTML = ''; }
-                    } catch(e){}
-                }
-            } catch(e) { console.error(e); }
-        });
-
-        // Public reset method bound here
-        this.reset = () => {
-            try { this.pause(); } catch(e){}
-            try { this.setQueue([]); } catch(e){}
-            this._queueIndex = -1;
-            try { this._updateMetadata({ title: 'Sin título', artist: 'Desconocido' }); } catch(e){}
-            try { if (this.$timeCurrent) this.$timeCurrent.textContent = '0:00'; } catch(e){}
-            try { if (this.$timeTotal) this.$timeTotal.textContent = '0:00'; } catch(e){}
-            try { if (this.$progressFill) this.$progressFill.style.width = '0%'; } catch(e){}
-            try { if (this.$progressHandle) this.$progressHandle.style.left = '0%'; } catch(e){}
-            try {
-                const main = document.querySelector('main-content');
-                const videoStage = main?.shadowRoot?.querySelector('#video-stage');
-                if (videoStage) { videoStage.classList.remove('active'); videoStage.innerHTML = ''; }
-            } catch(e){}
-        };
+        
     }
 
     #getTemplate() { 
@@ -237,6 +199,15 @@ export class PlayerBar extends Fast {
         // Attach underlying media element to wrapper (hidden until video type maybe later)
         this.mediaController.attachTo(this.$wrapper);
         this.media = this.mediaController.mediaEl;
+        // apply persisted loop/shuffle to media/UI
+        try {
+            if (this.media) this.media.loop = (this._loopMode === 'one');
+        } catch(e){}
+        try { this.$shuffle.classList.toggle('active', this._shuffle); } catch(e){}
+        try { this.$loop.classList.toggle('active', this._loopMode !== 'none'); } catch(e){}
+        try { this.$loop.classList.toggle('one', this._loopMode === 'one'); } catch(e){}
+        // refresh loop icon graphic according to mode
+        try { this._refreshLoopIcon(); } catch(e){}
         // sync UI volume to current media controller values
         try {
             this.$volumeSlider.value = Math.round((this.media?.volume ?? 1) * 100);
@@ -384,23 +355,27 @@ export class PlayerBar extends Fast {
     }
 
     next() {
-        if (this._queueIndex < 0 || this._queueIndex >= this._queue.length - 1) {
-            // emit end of queue
-            eventBus.emit('queue:end');
-            return;
-        }
+        if (!this._queue || this._queue.length === 0) return;
+
         if (this._shuffle) {
-            // pick random different index
-            let idx;
-            do { idx = Math.floor(Math.random()*this._queue.length); } while(idx === this._queueIndex && this._queue.length > 1);
-            this._queueIndex = idx;
+            // choose a random different index
+            if (this._queue.length === 1) this._queueIndex = 0;
+            else {
+                let idx = this._queueIndex;
+                while (idx === this._queueIndex) idx = Math.floor(Math.random() * this._queue.length);
+                this._queueIndex = idx;
+            }
         } else {
-            this._queueIndex++;
+            // normal ordered next
+            if (this._queueIndex < this._queue.length - 1) this._queueIndex++;
+            else {
+                if (this._loopMode === 'all') this._queueIndex = 0;
+                else { eventBus.emit('queue:end'); return; }
+            }
         }
         const descriptor = this._queue[this._queueIndex];
         this.loadMedia(descriptor);
-        // autoplay the newly loaded track (user gesture from next/prev click)
-        try { this.play(); } catch(e){}
+        try { this.play(); } catch (e) {}
     }
 
     prev() {
@@ -417,11 +392,16 @@ export class PlayerBar extends Fast {
         } catch(e) {}
 
         // Otherwise go to previous track in queue (if any)
-        if (this._queueIndex <= 0) {
-            eventBus.emit('queue:start');
-            return;
+        if (this._shuffle) {
+            // pick random different index
+            if (this._queue.length <= 1) { eventBus.emit('queue:start'); return; }
+            let idx;
+            do { idx = Math.floor(Math.random()*this._queue.length); } while(idx === this._queueIndex && this._queue.length > 1);
+            this._queueIndex = idx;
+        } else {
+            if (this._queueIndex <= 0) { eventBus.emit('queue:start'); return; }
+            this._queueIndex--;
         }
-        this._queueIndex--;
         const descriptor = this._queue[this._queueIndex];
         this.loadMedia(descriptor);
         // autoplay the newly loaded track (user gesture from prev click)
@@ -430,17 +410,36 @@ export class PlayerBar extends Fast {
 
     toggleShuffle() {
         this._shuffle = !this._shuffle;
-        // TODO: persist shuffle state
+        try { localStorage.setItem('player_shuffle', String(this._shuffle)); } catch(e){}
         this._updatePlayState();
         eventBus.emit('shuffle:change', { shuffle: this._shuffle });
     }
 
     toggleRepeat() {
-        this._loop = !this._loop;
-        if (this.media) this.media.loop = this._loop;
-        // TODO: persist repeat state
+        // cycle through loop modes: none -> all -> one -> none
+        const order = ['none','all','one'];
+        const idx = order.indexOf(this._loopMode);
+        const next = order[(idx + 1) % order.length];
+        this._loopMode = next;
+        if (this.media) this.media.loop = (this._loopMode === 'one');
+        try { localStorage.setItem('player_loopMode', this._loopMode); } catch(e){}
         this._updatePlayState();
-        eventBus.emit('repeat:change', { repeat: this._loop });
+        eventBus.emit('loop:change', { mode: this._loopMode });
+        // refresh loop icon graphic according to mode
+        try { this._refreshLoopIcon(); } catch(e){}
+    }
+
+    _refreshLoopIcon() {
+        try {
+            const ic = this.$loop?.querySelector('i');
+            if (!ic) return;
+            // Use a different icon when in 'one' mode to visually indicate single-track repeat
+            if (this._loopMode === 'one') {
+                ic.className = 'fa-solid fa-rotate-right';
+            } else {
+                ic.className = 'fa-solid fa-repeat';
+            }
+        } catch(e) { /* ignore */ }
     }
 
     destroy() {
@@ -475,10 +474,51 @@ export class PlayerBar extends Fast {
     }
 
     _onEnded() {
-        // if loop active, the media will loop itself if loop attribute set
-        this._playing = false;
-        this._updatePlayState();
-        this.dispatchEvent(new CustomEvent('player-ended',{bubbles:true}));
+        try {
+            // If loop one, let media.loop handle repeating the same track
+            if (this._loopMode === 'one') return;
+
+            // If shuffle is enabled, pick a random next track (different from current when possible)
+            if (this._shuffle && this._queue.length > 1) {
+                let idx = this._queueIndex;
+                while (idx === this._queueIndex) {
+                    idx = Math.floor(Math.random() * this._queue.length);
+                }
+                this._queueIndex = idx;
+                const descriptor = this._queue[this._queueIndex];
+                this.loadMedia(descriptor);
+                try { this.play(); } catch(e){}
+                return;
+            }
+
+            // Otherwise, advance in order if possible
+            if (this._queueIndex < this._queue.length - 1) {
+                this._queueIndex++;
+                const descriptor = this._queue[this._queueIndex];
+                this.loadMedia(descriptor);
+                try { this.play(); } catch(e){}
+                return;
+            }
+
+            // If at end and loop all, wrap to start
+            if (this._loopMode === 'all' && this._queue.length > 0) {
+                this._queueIndex = 0;
+                const descriptor = this._queue[this._queueIndex];
+                this.loadMedia(descriptor);
+                try { this.play(); } catch(e){}
+                return;
+            }
+
+            // Default: stop playback and update UI
+            this._playing = false;
+            this._updatePlayState();
+            this.dispatchEvent(new CustomEvent('player-ended',{bubbles:true}));
+        } catch (e) {
+            console.error(e);
+            this._playing = false;
+            this._updatePlayState();
+            this.dispatchEvent(new CustomEvent('player-ended',{bubbles:true}));
+        }
     }
 
     togglePlay() {
@@ -509,10 +549,11 @@ export class PlayerBar extends Fast {
             icon.className = 'fa-solid fa-play';
             this.$playPause.title = 'Reproducir';
         }
-        // reflect loop
-        if (this.media) this.media.loop = this._loop;
-        this.$loop.classList.toggle('active', this._loop);
-        this.$shuffle.classList.toggle('active', this._shuffle);
+        // reflect loopMode and shuffle
+        try { if (this.media) this.media.loop = (this._loopMode === 'one'); } catch(e){}
+        try { this.$loop.classList.toggle('active', this._loopMode !== 'none'); } catch(e){}
+        try { this.$loop.classList.toggle('one', this._loopMode === 'one'); } catch(e){}
+        try { this.$shuffle.classList.toggle('active', this._shuffle); } catch(e){}
     }
 
     // Legacy methods maintained for backward compatibility (will emit via new API)

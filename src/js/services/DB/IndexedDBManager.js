@@ -11,7 +11,6 @@ export default class IndexedDBManager {
 
 			request.onupgradeneeded = (event) => {
 				const db = event.target.result;
-                //! Crear tablas
             }
 
 			request.onsuccess = (event) => {
